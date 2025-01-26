@@ -31,7 +31,6 @@ jobs:
         run: |
           mkdir -p deployment
           mv application deployment/
-          mv config.json deployment/ # Ensure to include all required files
           zip -r application.zip deployment/
 
       # Deploy to Elastic Beanstalk
