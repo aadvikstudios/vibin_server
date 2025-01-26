@@ -9,6 +9,7 @@ import (
 	"vibin_server/services"
 
 	"github.com/gorilla/mux"
+	"github.com/rs/cors"
 )
 
 func main() {
@@ -35,7 +36,15 @@ func main() {
 	routes.RegisterUserProfileRoutes(r, userProfileService)
 	routes.RegisterActionRoutes(r, actionService)
 
-	// Start the server
+	// Add CORS middleware with "*" for AllowedOrigins
+	corsHandler := cors.New(cors.Options{
+		AllowedOrigins:   []string{"*"}, // Allow all origins
+		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Content-Type", "Authorization"},
+		AllowCredentials: false, // Set this to false for security when using "*"
+	}).Handler(r)
+
+	// Start the server with CORS
 	log.Printf("Server running on port %s", port)
-	log.Fatal(http.ListenAndServe(":"+port, r))
+	log.Fatal(http.ListenAndServe(":"+port, corsHandler))
 }
