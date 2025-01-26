@@ -10,30 +10,35 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Checkout the code
+      # Step 1: Checkout the code
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # Set up Go environment
+      # Step 2: Set up Go environment
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
           go-version: '1.20'
 
-      # Install dependencies and build
+      # Step 3: Install dependencies and build
       - name: Install dependencies and build
         run: |
           go mod tidy
+          # Build the Go binary
           go build -o application main.go
 
-      # Package application for deployment
+      # Step 4: Add Procfile and prepare deployment package
       - name: Prepare deployment package
         run: |
+          # Create a Procfile to define how to start the application
+          echo "web: ./application" > Procfile
           mkdir -p deployment
           mv application deployment/
+          mv Procfile deployment/
+          # Include other necessary files (if required)
           zip -r application.zip deployment/
 
-      # Deploy to Elastic Beanstalk
+      # Step 5: Deploy to Elastic Beanstalk
       - name: Deploy to Elastic Beanstalk
         uses: einaregilsson/beanstalk-deploy@v22
         with:
