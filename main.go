@@ -16,6 +16,12 @@ func main() {
 	dynamoClient := services.InitializeDynamoDBClient()
 	dynamoService := &services.DynamoService{Client: dynamoClient}
 
+	// Initialize UserProfileService
+	userProfileService := &services.UserProfileService{Dynamo: dynamoService}
+
+	// Initialize ActionService (if needed)
+	actionService := &services.ActionService{Dynamo: dynamoService}
+
 	// Set up the server port
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -25,9 +31,11 @@ func main() {
 	// Initialize the router
 	r := mux.NewRouter()
 
-	// Pass DynamoService to routes for dependency injection
-	routes.RegisterUserProfileRoutes(r, dynamoService)
+	// Register routes
+	routes.RegisterUserProfileRoutes(r, userProfileService)
+	routes.RegisterActionRoutes(r, actionService)
 
+	// Start the server
 	log.Printf("Server running on port %s", port)
 	log.Fatal(http.ListenAndServe(":"+port, r))
 }

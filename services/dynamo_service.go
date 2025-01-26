@@ -83,7 +83,6 @@ func (ds *DynamoService) GetItem(ctx context.Context, tableName string, key map[
 	return output.Item, nil
 }
 
-// UpdateItem updates an existing item in DynamoDB
 func (ds *DynamoService) UpdateItem(
 	ctx context.Context,
 	tableName string,
