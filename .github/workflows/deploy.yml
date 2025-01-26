@@ -53,6 +53,7 @@ jobs:
           region: ap-south-1
           version_label: "build-${{ github.sha }}-${{ github.run_number }}"
           deployment_package: application.zip
+          update_environment: true
 
       # Step 7: Confirm the new version is active
       - name: Confirm Deployment
