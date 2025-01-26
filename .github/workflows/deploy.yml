@@ -36,7 +36,13 @@ jobs:
           ls -la deployment # Verify the contents of the deployment folder
           zip -r application.zip deployment/
 
-      # Step 5: Deploy to Elastic Beanstalk
+      # Step 5: Verify deployment package
+      - name: Verify deployment package
+        run: |
+          echo "Contents of application.zip:"
+          unzip -l application.zip
+
+      # Step 6: Deploy to Elastic Beanstalk
       - name: Deploy to Elastic Beanstalk
         uses: einaregilsson/beanstalk-deploy@v22
         with:
@@ -45,5 +51,10 @@ jobs:
           application_name: vibin-server
           environment_name: vibin-server-env-1
           region: ap-south-1
-          version_label: ${{ github.sha }}
+          version_label: "build-${{ github.sha }}-${{ github.run_number }}"
           deployment_package: application.zip
+
+      # Step 7: Confirm the new version is active
+      - name: Confirm Deployment
+        run: |
+          echo "Deployment triggered for version: build-${{ github.sha }}-${{ github.run_number }}"
