@@ -45,5 +45,5 @@ jobs:
           application_name: vibin-server
           environment_name: vibin-server-env
           region: ap-south-1
-          version_label: ${{ github.sha }}
+          version_label: Sample
           deployment_package: application.zip
