@@ -35,13 +35,13 @@ func (ac *MatchController) GetFilteredProfiles(w http.ResponseWriter, r *http.Re
 
 // GetPings handles fetching pings for a user
 func (ac *MatchController) GetPings(w http.ResponseWriter, r *http.Request) {
-	userID := r.URL.Query().Get("userId")
-	if userID == "" {
+	emailId := r.URL.Query().Get("emailId")
+	if emailId == "" {
 		http.Error(w, "userId is required", http.StatusBadRequest)
 		return
 	}
 
-	pings, err := ac.MatchService.GetPings(context.Background(), userID)
+	pings, err := ac.MatchService.GetPings(context.Background(), emailId)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -56,13 +56,13 @@ func (ac *MatchController) GetPings(w http.ResponseWriter, r *http.Request) {
 
 // GetCurrentMatches handles fetching current matches for a user
 func (ac *MatchController) GetCurrentMatches(w http.ResponseWriter, r *http.Request) {
-	userID := r.URL.Query().Get("userId")
-	if userID == "" {
+	emailId := r.URL.Query().Get("emailId")
+	if emailId == "" {
 		http.Error(w, "userId is required", http.StatusBadRequest)
 		return
 	}
 
-	matches, err := ac.MatchService.GetCurrentMatches(context.Background(), userID)
+	matches, err := ac.MatchService.GetCurrentMatches(context.Background(), emailId)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -76,13 +76,13 @@ func (ac *MatchController) GetCurrentMatches(w http.ResponseWriter, r *http.Requ
 
 // GetNewLikes handles fetching new likes for a user
 func (ac *MatchController) GetNewLikes(w http.ResponseWriter, r *http.Request) {
-	userID := r.URL.Query().Get("userId")
-	if userID == "" {
+	emailId := r.URL.Query().Get("emailId")
+	if emailId == "" {
 		http.Error(w, "userId is required", http.StatusBadRequest)
 		return
 	}
 
-	likes, err := ac.MatchService.GetNewLikes(context.Background(), userID)
+	likes, err := ac.MatchService.GetNewLikes(context.Background(), emailId)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
