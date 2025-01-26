@@ -1,4 +1,4 @@
-module vibin-server
+module vibin_server
 
 go 1.21
 
