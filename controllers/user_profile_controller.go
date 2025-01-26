@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"vibin_server/models"
 	"vibin_server/services"
 
 	"github.com/google/uuid"
@@ -24,7 +25,7 @@ func NewUserProfileController(userProfileService *services.UserProfileService) *
 func (c *UserProfileController) CreateUserProfile(w http.ResponseWriter, r *http.Request) {
 	log.Println("CreateUserProfile called...")
 
-	var profile services.UserProfile
+	var profile models.UserProfile
 
 	// Decode the request body
 	if err := json.NewDecoder(r.Body).Decode(&profile); err != nil {
