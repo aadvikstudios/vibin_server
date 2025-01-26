@@ -24,15 +24,15 @@ jobs:
       - name: Install dependencies and build
         run: |
           go mod tidy
-          go build -o application main.go
-          ls -la # Verify that the binary is created
+          go build -o bin/application main.go
+          ls -la bin/ # Verify the binary is created in the bin folder
 
       # Step 4: Prepare deployment package
       - name: Prepare deployment package
         run: |
-          mkdir -p deployment
-          mv application deployment/ || echo "Binary not found. Check build step."
-          echo "web: ./application" > deployment/Procfile
+          mkdir -p deployment/bin
+          mv bin/application deployment/bin/ || echo "Binary not found. Check build step."
+          echo "web: ./bin/application" > deployment/Procfile
           ls -la deployment # Verify the contents of the deployment folder
           zip -r application.zip deployment/
 
