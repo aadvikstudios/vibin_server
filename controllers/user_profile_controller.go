@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"vibin_server/services"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 )
 
@@ -22,15 +23,22 @@ func NewUserProfileController(userProfileService *services.UserProfileService) *
 
 func (c *UserProfileController) CreateUserProfile(w http.ResponseWriter, r *http.Request) {
 	log.Println("CreateUserProfile called...")
+
 	var profile services.UserProfile
 
+	// Decode the request body
 	if err := json.NewDecoder(r.Body).Decode(&profile); err != nil {
 		log.Printf("Failed to decode request body: %v\n", err)
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
 		return
 	}
-	log.Printf("Request payload: %+v\n", profile)
+	log.Printf("Request payload before generating userId: %+v\n", profile)
 
+	// Generate a new UUID for userId
+	profile.UserID = uuid.New().String()
+	log.Printf("Generated userId: %s\n", profile.UserID)
+
+	// Call the service to add the user profile
 	createdProfile, err := c.UserProfileService.AddUserProfile(context.TODO(), profile)
 	if err != nil {
 		log.Printf("Failed to add profile: %v\n", err)
@@ -38,6 +46,7 @@ func (c *UserProfileController) CreateUserProfile(w http.ResponseWriter, r *http
 		return
 	}
 
+	// Return the created profile
 	log.Printf("Profile added successfully: %+v\n", createdProfile)
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"message": "Profile added successfully",

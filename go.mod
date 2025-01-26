@@ -12,6 +12,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.74.1
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.1
+	github.com/rs/cors v1.11.1
 )
 
 require (
@@ -33,5 +34,4 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.33.10 // indirect
 	github.com/aws/smithy-go v1.22.2 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
-	github.com/rs/cors v1.11.1 // indirect
 )

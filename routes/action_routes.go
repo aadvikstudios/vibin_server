@@ -7,15 +7,19 @@ import (
 	"github.com/gorilla/mux"
 )
 
-// RegisterActionRoutes sets up routes for action-related operations
+// RegisterActionRoutes sets up routes for action-related operations under /api/action
 func RegisterActionRoutes(r *mux.Router, actionService *services.ActionService) {
 	// Initialize the controller with the ActionService
 	controller := controllers.NewActionController(actionService)
 
-	r.HandleFunc("/pingAction", controller.HandlePingAction).Methods("POST")
-	r.HandleFunc("/action", controller.HandleAction).Methods("POST")
-	r.HandleFunc("/currentMatches", controller.GetCurrentMatches).Methods("GET")
-	r.HandleFunc("/newLikes", controller.GetNewLikes).Methods("GET")
-	r.HandleFunc("/pings", controller.GetPings).Methods("GET")
-	r.HandleFunc("/filteredProfiles", controller.GetFilteredProfiles).Methods("GET")
+	// Create a subrouter for /api/action
+	actionRouter := r.PathPrefix("/api/action").Subrouter()
+
+	// Define routes and their corresponding handlers
+	actionRouter.HandleFunc("/pingAction", controller.HandlePingAction).Methods("POST")
+	actionRouter.HandleFunc("/action", controller.HandleAction).Methods("POST")
+	actionRouter.HandleFunc("/currentMatches", controller.GetCurrentMatches).Methods("GET")
+	actionRouter.HandleFunc("/newLikes", controller.GetNewLikes).Methods("GET")
+	actionRouter.HandleFunc("/pings", controller.GetPings).Methods("GET")
+	actionRouter.HandleFunc("/filteredProfiles", controller.GetFilteredProfiles).Methods("GET")
 }
