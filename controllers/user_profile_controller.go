@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"vibin_server/services"
 
@@ -19,20 +20,25 @@ func NewUserProfileController(userProfileService *services.UserProfileService) *
 	return &UserProfileController{UserProfileService: userProfileService}
 }
 
-// CreateUserProfile handles creating a new user profile
 func (c *UserProfileController) CreateUserProfile(w http.ResponseWriter, r *http.Request) {
+	log.Println("CreateUserProfile called...")
 	var profile services.UserProfile
+
 	if err := json.NewDecoder(r.Body).Decode(&profile); err != nil {
+		log.Printf("Failed to decode request body: %v\n", err)
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
 		return
 	}
+	log.Printf("Request payload: %+v\n", profile)
 
 	createdProfile, err := c.UserProfileService.AddUserProfile(context.TODO(), profile)
 	if err != nil {
+		log.Printf("Failed to add profile: %v\n", err)
 		http.Error(w, "Failed to add profile", http.StatusInternalServerError)
 		return
 	}
 
+	log.Printf("Profile added successfully: %+v\n", createdProfile)
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"message": "Profile added successfully",
 		"profile": createdProfile,

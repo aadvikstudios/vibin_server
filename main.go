@@ -14,41 +14,54 @@ import (
 
 func main() {
 	// Initialize DynamoDB client and service
+	log.Println("Initializing DynamoDB client...")
 	dynamoClient := services.InitializeDynamoDBClient()
 	dynamoService := &services.DynamoService{Client: dynamoClient}
+	log.Println("DynamoDB client initialized.")
 
 	// Initialize UserProfileService
+	log.Println("Initializing UserProfileService...")
 	userProfileService := &services.UserProfileService{Dynamo: dynamoService}
+	log.Println("UserProfileService initialized.")
 
 	// Initialize ActionService
+	log.Println("Initializing ActionService...")
 	actionService := &services.ActionService{Dynamo: dynamoService}
+	log.Println("ActionService initialized.")
 
 	// Initialize ChatService
+	log.Println("Initializing ChatService...")
 	chatService := &services.ChatService{Dynamo: dynamoService}
+	log.Println("ChatService initialized.")
 
 	// Set up the server port
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
+	log.Printf("Using server port: %s\n", port)
 
 	// Initialize the router
+	log.Println("Initializing router...")
 	r := mux.NewRouter()
 
 	// Register routes
+	log.Println("Registering routes...")
 	routes.RegisterUserProfileRoutes(r, userProfileService)
 	routes.RegisterActionRoutes(r, actionService)
-	routes.RegisterChatRoutes(r, chatService) // Add Chat Routes
+	routes.RegisterChatRoutes(r, chatService)
+	log.Println("Routes registered.")
 
-	// Add CORS middleware with "*" for AllowedOrigins
+	// Add CORS middleware
+	log.Println("Configuring CORS...")
 	corsHandler := cors.New(cors.Options{
-		AllowedOrigins:   []string{"*"}, // Allow all origins
+		AllowedOrigins:   []string{"*"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Content-Type", "Authorization"},
-		AllowCredentials: false, // Set this to false for security when using "*"
+		AllowCredentials: false,
 	}).Handler(r)
 
-	// Start the server with CORS
-	log.Printf("Server running on port %s", port)
+	// Start the server
+	log.Printf("Starting server on port %s...\n", port)
 	log.Fatal(http.ListenAndServe(":"+port, corsHandler))
 }

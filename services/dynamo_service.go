@@ -49,20 +49,25 @@ func (ds *DynamoService) QueryItems(
 	return output.Items, nil
 }
 
-// PutItem inserts an item into DynamoDB
 func (ds *DynamoService) PutItem(ctx context.Context, tableName string, item interface{}) error {
+	log.Printf("Marshalling item for table '%s'...\n", tableName)
 	marshaledItem, err := attributevalue.MarshalMap(item)
 	if err != nil {
+		log.Printf("Failed to marshal item: %v\n", err)
 		return fmt.Errorf("failed to marshal item: %w", err)
 	}
+	log.Printf("Item marshalled: %+v\n", marshaledItem)
 
+	log.Printf("Inserting item into table '%s'...\n", tableName)
 	_, err = ds.Client.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: &tableName,
 		Item:      marshaledItem,
 	})
 	if err != nil {
+		log.Printf("Failed to insert item: %v\n", err)
 		return fmt.Errorf("failed to put item in table '%s': %w", tableName, err)
 	}
+	log.Println("Item successfully inserted.")
 	return nil
 }
 
