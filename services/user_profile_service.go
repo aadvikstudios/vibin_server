@@ -10,9 +10,19 @@ import (
 )
 
 type UserProfile struct {
-	UserID   string `dynamodbav:"userId"`
-	FullName string `dynamodbav:"fullName"`
-	EmailID  string `dynamodbav:"emailId"`
+	UserID              string   `dynamodbav:"userId"`
+	FullName            string   `dynamodbav:"fullName"`
+	EmailID             string   `dynamodbav:"emailId"`
+	Bio                 string   `dynamodbav:"bio"`
+	Desires             []string `dynamodbav:"desires"`
+	DOB                 string   `dynamodbav:"dob"`
+	Gender              string   `dynamodbav:"gender"`
+	Interests           []string `dynamodbav:"interests"`
+	Latitude            float64  `dynamodbav:"latitude"`
+	Longitude           float64  `dynamodbav:"longitude"`
+	LookingFor          string   `dynamodbav:"lookingFor"`
+	Orientation         string   `dynamodbav:"orientation"`
+	ShowGenderOnProfile bool     `dynamodbav:"showGenderOnProfile"`
 }
 
 const UserProfilesTable = "UserProfiles"
