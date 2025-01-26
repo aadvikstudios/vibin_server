@@ -31,7 +31,6 @@ jobs:
       # Step 4: Prepare deployment package
       - name: Prepare deployment package
         run: |
-          # Place files in the root of the deployment package
           echo "web: ./application" > Procfile
           zip -r application.zip application Procfile
           ls -la # Verify the contents of the deployment package
