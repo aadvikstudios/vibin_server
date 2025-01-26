@@ -25,14 +25,18 @@ jobs:
         run: |
           go mod tidy
           go build -o bin/application main.go
+          chmod +x bin/application # Ensure binary is executable
           ls -la bin/ # Verify the binary is created in the bin folder
 
       # Step 4: Prepare deployment package
       - name: Prepare deployment package
         run: |
           mkdir -p deployment/bin
-          mv bin/application deployment/bin/ || echo "Binary not found. Check build step."
+          mv bin/application deployment/bin/
           echo "web: ./bin/application" > deployment/Procfile
+          mkdir -p deployment/.platform
+          echo '[{"namespace":"aws:elasticbeanstalk:container:golang","option_name":"Procfile","value":"Procfile"}]' > deployment/.platform/options.json
+          chmod -R +x deployment # Ensure all files have necessary permissions
           ls -la deployment # Verify the contents of the deployment folder
           zip -r application.zip deployment/
 
@@ -53,7 +57,7 @@ jobs:
           region: ap-south-1
           version_label: "build-${{ github.sha }}-${{ github.run_number }}"
           deployment_package: application.zip
-          update_environment: true
+          wait_for_deployment: true
 
       # Step 7: Confirm the new version is active
       - name: Confirm Deployment
