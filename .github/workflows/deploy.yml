@@ -20,22 +20,20 @@ jobs:
         with:
           go-version: '1.20'
 
-      # Step 3: Install dependencies and build
+      # Step 3: Install dependencies and build the Go binary
       - name: Install dependencies and build
         run: |
           go mod tidy
-          # Build the Go binary
           go build -o application main.go
+          ls -la # Verify that the binary is created
 
-      # Step 4: Add Procfile and prepare deployment package
+      # Step 4: Prepare deployment package
       - name: Prepare deployment package
         run: |
-          # Create a Procfile to define how to start the application
-          echo "web: ./application" > Procfile
           mkdir -p deployment
-          mv application deployment/
-          mv Procfile deployment/
-          # Include other necessary files (if required)
+          mv application deployment/ || echo "Binary not found. Check build step."
+          echo "web: ./application" > deployment/Procfile
+          ls -la deployment # Verify the contents of the deployment folder
           zip -r application.zip deployment/
 
       # Step 5: Deploy to Elastic Beanstalk
