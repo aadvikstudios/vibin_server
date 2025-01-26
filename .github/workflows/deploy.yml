@@ -10,38 +10,32 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout the code
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # Step 2: Set up Go environment
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
           go-version: '1.20'
 
-      # Step 3: Install dependencies and build the Go binary
       - name: Install dependencies and build
         run: |
           go mod tidy
           go build -o application main.go
-          chmod +x application # Ensure binary is executable
-          ls -la # Verify the binary is created
+          chmod +x application
+          ls -la
 
-      # Step 4: Prepare deployment package
       - name: Prepare deployment package
         run: |
           echo "web: ./application" > Procfile
-          zip -r application.zip application Procfile
-          ls -la # Verify the contents of the deployment package
+          zip -r application.zip application Procfile go.mod go.sum
+          ls -la
 
-      # Step 5: Verify deployment package
       - name: Verify deployment package
         run: |
           echo "Contents of application.zip:"
           unzip -l application.zip
 
-      # Step 6: Deploy to Elastic Beanstalk
       - name: Deploy to Elastic Beanstalk
         uses: einaregilsson/beanstalk-deploy@v22
         with:
@@ -54,7 +48,6 @@ jobs:
           deployment_package: application.zip
           wait_for_deployment: true
 
-      # Step 7: Confirm the new version is active
       - name: Confirm Deployment
         run: |
           echo "Deployment triggered for version: build-${{ github.sha }}-${{ github.run_number }}"
