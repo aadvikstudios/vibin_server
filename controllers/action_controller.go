@@ -39,22 +39,6 @@ func (ac *ActionController) HandlePingAction(w http.ResponseWriter, r *http.Requ
 	json.NewEncoder(w).Encode(map[string]string{"message": "Ping action processed successfully"})
 }
 
-// GetFilteredProfiles handles fetching filtered profiles
-func (ac *ActionController) GetFilteredProfiles(w http.ResponseWriter, r *http.Request) {
-	userID := r.URL.Query().Get("userId")
-	gender := r.URL.Query().Get("gender")
-
-	if userID == "" || gender == "" {
-		http.Error(w, "userId and gender are required", http.StatusBadRequest)
-		return
-	}
-
-	// Logic to get filtered profiles
-	// ...
-
-	json.NewEncoder(w).Encode(map[string]interface{}{"profiles": []string{}})
-}
-
 // HandleAction processes user actions such as "liked", "notliked", and "pinged"
 func (ac *ActionController) HandleAction(w http.ResponseWriter, r *http.Request) {
 	var request struct {
@@ -86,67 +70,6 @@ func (ac *ActionController) HandleAction(w http.ResponseWriter, r *http.Request)
 	// Send a successful response
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
-}
-
-// GetPings handles fetching pings for a user
-func (ac *ActionController) GetPings(w http.ResponseWriter, r *http.Request) {
-	userID := r.URL.Query().Get("userId")
-	if userID == "" {
-		http.Error(w, "userId is required", http.StatusBadRequest)
-		return
-	}
-
-	pings, err := ac.ActionService.GetPings(context.Background(), userID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"message": "Pings fetched successfully",
-		"pings":   pings,
-	})
-}
-
-// GetCurrentMatches handles fetching current matches for a user
-func (ac *ActionController) GetCurrentMatches(w http.ResponseWriter, r *http.Request) {
-	userID := r.URL.Query().Get("userId")
-	if userID == "" {
-		http.Error(w, "userId is required", http.StatusBadRequest)
-		return
-	}
-
-	matches, err := ac.ActionService.GetCurrentMatches(context.Background(), userID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"matches": matches,
-	})
-}
-
-// GetNewLikes handles fetching new likes for a user
-func (ac *ActionController) GetNewLikes(w http.ResponseWriter, r *http.Request) {
-	userID := r.URL.Query().Get("userId")
-	if userID == "" {
-		http.Error(w, "userId is required", http.StatusBadRequest)
-		return
-	}
-
-	likes, err := ac.ActionService.GetNewLikes(context.Background(), userID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"likes": likes,
-	})
 }
 
 // Other handler functions...

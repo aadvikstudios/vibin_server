@@ -34,6 +34,11 @@ func main() {
 	chatService := &services.ChatService{Dynamo: dynamoService}
 	log.Println("ChatService initialized.")
 
+	// Initialize ChatService
+	log.Println("Initializing ChatService...")
+	matchService := &services.MatchService{Dynamo: dynamoService}
+	log.Println("ChatService initialized.")
+
 	// Set up the server port
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -50,6 +55,7 @@ func main() {
 	routes.RegisterUserProfileRoutes(r, userProfileService)
 	routes.RegisterActionRoutes(r, actionService)
 	routes.RegisterChatRoutes(r, chatService)
+	routes.RegisterMatchRoutes(r, matchService)
 	log.Println("Routes registered.")
 
 	// Add CORS middleware
