@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"vibin_server/models"
 
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
@@ -47,8 +48,9 @@ func (ups *UserProfileService) GetUserProfile(ctx context.Context, userID string
 	return &profile, nil
 }
 
-// GetUserProfileByEmail retrieves a user profile by email using a GSI
 func (ups *UserProfileService) GetUserProfileByEmail(ctx context.Context, emailID string) (*models.UserProfile, error) {
+	log.Printf("Fetching profile by email: %s\n", emailID)
+
 	keyCondition := "emailId = :emailId"
 	expressionAttributeValues := map[string]types.AttributeValue{
 		":emailId": &types.AttributeValueMemberS{Value: emailID},
@@ -56,19 +58,23 @@ func (ups *UserProfileService) GetUserProfileByEmail(ctx context.Context, emailI
 
 	items, err := ups.Dynamo.QueryItems(ctx, models.UserProfilesTable, keyCondition, expressionAttributeValues, nil, 1)
 	if err != nil {
+		log.Printf("Error querying DynamoDB: %v\n", err)
 		return nil, fmt.Errorf("failed to fetch profile by email: %w", err)
 	}
 
 	if len(items) == 0 {
-		return nil, errors.New("profile not found")
+		log.Printf("No profile found for email: %s\n", emailID)
+		return nil, nil // No profile found
 	}
 
 	var profile models.UserProfile
 	err = attributevalue.UnmarshalMap(items[0], &profile)
 	if err != nil {
-		return nil, err
+		log.Printf("Error unmarshalling DynamoDB item: %v\n", err)
+		return nil, fmt.Errorf("failed to unmarshal profile: %w", err)
 	}
 
+	log.Printf("Profile fetched successfully: %+v\n", profile)
 	return &profile, nil
 }
 
