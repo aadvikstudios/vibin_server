@@ -20,8 +20,11 @@ func main() {
 	// Initialize UserProfileService
 	userProfileService := &services.UserProfileService{Dynamo: dynamoService}
 
-	// Initialize ActionService (if needed)
+	// Initialize ActionService
 	actionService := &services.ActionService{Dynamo: dynamoService}
+
+	// Initialize ChatService
+	chatService := &services.ChatService{Dynamo: dynamoService}
 
 	// Set up the server port
 	port := os.Getenv("PORT")
@@ -35,6 +38,7 @@ func main() {
 	// Register routes
 	routes.RegisterUserProfileRoutes(r, userProfileService)
 	routes.RegisterActionRoutes(r, actionService)
+	routes.RegisterChatRoutes(r, chatService) // Add Chat Routes
 
 	// Add CORS middleware with "*" for AllowedOrigins
 	corsHandler := cors.New(cors.Options{
