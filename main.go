@@ -1,3 +1,56 @@
+package main
+
+import (
+	"context"
+	"log"
+	"net/http"
+	"os"
+	"time"
+
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/gorilla/mux"
+)
+
+// Global DynamoDB client
+var dynamoClient *dynamodb.Client
+
+func init() {
+	cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(os.Getenv("AWS_REGION")))
+	if err != nil {
+		log.Fatalf("Failed to load AWS config: %v", err)
+	}
+	dynamoClient = dynamodb.NewFromConfig(cfg)
+}
+
+// Response structure
+type Response struct {
+	Message string      `json:"message"`
+	Data    interface{} `json:"data,omitempty"`
+}
+
+// Message and UserProfile structs
+type Message struct {
+	MessageID string    `dynamodbav:"messageId"`
+	MatchID   string    `dynamodbav:"matchId"`
+	SenderID  *string   `dynamodbav:"senderId"`
+	Content   string    `dynamodbav:"content"`
+	CreatedAt time.Time `dynamodbav:"createdAt"`
+	Liked     bool      `dynamodbav:"liked"`
+	Read      bool      `dynamodbav:"read"`
+}
+
+type UserProfile struct {
+	UserID   string `dynamodbav:"userId"`
+	EmailID  string `dynamodbav:"emailId"`
+	FullName string `dynamodbav:"fullName"`
+}
+
+// DynamoDB Logic: AddMessage, GetMessages, etc.
+// [Add the functions from your second file here]
+
+// HTTP Handlers: HealthCheckHandler, WelcomeHandler, etc.
+// [Add the handlers from your first file here]
 func main() {
 	port := os.Getenv("PORT")
 	if port == "" {
