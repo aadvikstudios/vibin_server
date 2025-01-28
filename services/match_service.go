@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"vibin_server/models"
 
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 )
@@ -123,11 +124,11 @@ func (as *MatchService) GetNewLikes(ctx context.Context, userID string) ([]map[s
 	return likedProfiles, nil
 }
 
-func (as *MatchService) GetFilteredProfiles(ctx context.Context, emailId, gender string, additionalFilters map[string]string) ([]map[string]types.AttributeValue, error) {
-	if emailId == "" || gender == "" {
-		return nil, fmt.Errorf("emailId and gender are required")
-	}
-
+func (as *MatchService) GetFilteredProfiles(
+	ctx context.Context,
+	emailId, gender string,
+	additionalFilters map[string]string,
+) ([]models.UserProfile, error) {
 	// Prepare filters and exclusions
 	excludeFields := map[string]string{
 		"emailId": emailId,
@@ -139,6 +140,13 @@ func (as *MatchService) GetFilteredProfiles(ctx context.Context, emailId, gender
 		excludeFields[key] = value
 	}
 
-	// Call DynamoService
-	return as.Dynamo.ScanWithFilter(ctx, "UserProfiles", nil, excludeFields)
+	// Prepare result slice
+	var profiles []models.UserProfile
+
+	// Use DynamoService to scan with filters
+	if err := as.Dynamo.ScanWithFilter(ctx, models.UserProfilesTable, nil, excludeFields, &profiles); err != nil {
+		return nil, fmt.Errorf("failed to fetch filtered profiles: %w", err)
+	}
+
+	return profiles, nil
 }

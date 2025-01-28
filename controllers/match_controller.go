@@ -45,7 +45,7 @@ func (ac *MatchController) GetFilteredProfiles(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	// Encode and send response
+	// Send response
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"profiles": profiles,

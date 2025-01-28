@@ -122,13 +122,13 @@ func (ds *DynamoService) DeleteItem(ctx context.Context, tableName string, key m
 	}
 	return nil
 }
-
 func (ds *DynamoService) ScanWithFilter(
 	ctx context.Context,
 	tableName string,
-	filters map[string]string, // Field-value pairs for filtering
-	excludeFields map[string]string, // Fields to exclude specific values
-) ([]map[string]types.AttributeValue, error) {
+	filters map[string]string,
+	excludeFields map[string]string,
+	result interface{}, // Pass the result as a pointer to a slice of structs
+) error {
 	// Build FilterExpression
 	var filterExpressions []string
 	expressionAttributeNames := map[string]string{}
@@ -162,10 +162,15 @@ func (ds *DynamoService) ScanWithFilter(
 		ExpressionAttributeValues: expressionAttributeValues,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to scan table '%s' with filters: %w", tableName, err)
+		return fmt.Errorf("failed to scan table '%s' with filters: %w", tableName, err)
 	}
 
-	return output.Items, nil
+	// Unmarshal items into the result
+	if err := attributevalue.UnmarshalListOfMaps(output.Items, result); err != nil {
+		return fmt.Errorf("failed to unmarshal scan result: %w", err)
+	}
+
+	return nil
 }
 
 // Utility function to join strings
