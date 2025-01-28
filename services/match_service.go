@@ -122,3 +122,23 @@ func (as *MatchService) GetNewLikes(ctx context.Context, userID string) ([]map[s
 
 	return likedProfiles, nil
 }
+
+func (as *MatchService) GetFilteredProfiles(ctx context.Context, emailId, gender string, additionalFilters map[string]string) ([]map[string]types.AttributeValue, error) {
+	if emailId == "" || gender == "" {
+		return nil, fmt.Errorf("emailId and gender are required")
+	}
+
+	// Prepare filters and exclusions
+	excludeFields := map[string]string{
+		"emailId": emailId,
+		"gender":  gender,
+	}
+
+	// Merge additional filters
+	for key, value := range additionalFilters {
+		excludeFields[key] = value
+	}
+
+	// Call DynamoService
+	return as.Dynamo.ScanWithFilter(ctx, "UserProfiles", nil, excludeFields)
+}

@@ -122,3 +122,60 @@ func (ds *DynamoService) DeleteItem(ctx context.Context, tableName string, key m
 	}
 	return nil
 }
+
+func (ds *DynamoService) ScanWithFilter(
+	ctx context.Context,
+	tableName string,
+	filters map[string]string, // Field-value pairs for filtering
+	excludeFields map[string]string, // Fields to exclude specific values
+) ([]map[string]types.AttributeValue, error) {
+	// Build FilterExpression
+	var filterExpressions []string
+	expressionAttributeNames := map[string]string{}
+	expressionAttributeValues := map[string]types.AttributeValue{}
+
+	// Include filters
+	for key, value := range filters {
+		expressionAttributeNames["#"+key] = key
+		expressionAttributeValues[":"+key] = &types.AttributeValueMemberS{Value: value}
+		filterExpressions = append(filterExpressions, fmt.Sprintf("#%s = :%s", key, key))
+	}
+
+	// Exclude filters
+	for key, value := range excludeFields {
+		expressionAttributeNames["#"+key] = key
+		expressionAttributeValues[":"+key] = &types.AttributeValueMemberS{Value: value}
+		filterExpressions = append(filterExpressions, fmt.Sprintf("#%s <> :%s", key, key))
+	}
+
+	// Combine expressions
+	filterExpression := ""
+	if len(filterExpressions) > 0 {
+		filterExpression = fmt.Sprintf("(%s)", stringJoin(filterExpressions, " AND "))
+	}
+
+	// Perform scan with filters
+	output, err := ds.Client.Scan(ctx, &dynamodb.ScanInput{
+		TableName:                 &tableName,
+		FilterExpression:          &filterExpression,
+		ExpressionAttributeNames:  expressionAttributeNames,
+		ExpressionAttributeValues: expressionAttributeValues,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan table '%s' with filters: %w", tableName, err)
+	}
+
+	return output.Items, nil
+}
+
+// Utility function to join strings
+func stringJoin(parts []string, delimiter string) string {
+	result := ""
+	for i, part := range parts {
+		if i > 0 {
+			result += delimiter
+		}
+		result += part
+	}
+	return result
+}

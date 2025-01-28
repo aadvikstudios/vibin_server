@@ -3,41 +3,60 @@ package controllers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"vibin_server/services"
 )
 
-// ActionController handles HTTP requests for actions
+// MatchController handles HTTP requests for match-related actions
 type MatchController struct {
 	MatchService *services.MatchService
 }
 
-// NewActionController creates a new ActionController instance
+// NewMatchController creates a new MatchController instance
 func NewMatchController(matchService *services.MatchService) *MatchController {
 	return &MatchController{MatchService: matchService}
 }
 
-// GetFilteredProfiles handles fetching filtered profiles
+// GetFilteredProfiles handles fetching filtered profiles based on dynamic criteria
 func (ac *MatchController) GetFilteredProfiles(w http.ResponseWriter, r *http.Request) {
-	userID := r.URL.Query().Get("userId")
-	gender := r.URL.Query().Get("gender")
+	// Parse query parameters
+	queryParams := r.URL.Query()
+	emailId := queryParams.Get("emailId")
+	gender := queryParams.Get("gender")
 
-	if userID == "" || gender == "" {
-		http.Error(w, "userId and gender are required", http.StatusBadRequest)
+	if emailId == "" || gender == "" {
+		http.Error(w, "emailId and gender are required", http.StatusBadRequest)
 		return
 	}
 
-	// Logic to get filtered profiles
-	// ...
+	// Prepare additional filters from query parameters
+	additionalFilters := map[string]string{}
+	for key, values := range queryParams {
+		if key != "emailId" && key != "gender" {
+			additionalFilters[key] = values[0]
+		}
+	}
 
-	json.NewEncoder(w).Encode(map[string]interface{}{"profiles": []string{}})
+	// Fetch filtered profiles using the service
+	profiles, err := ac.MatchService.GetFilteredProfiles(r.Context(), emailId, gender, additionalFilters)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to fetch profiles: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Encode and send response
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"profiles": profiles,
+	})
 }
 
 // GetPings handles fetching pings for a user
 func (ac *MatchController) GetPings(w http.ResponseWriter, r *http.Request) {
 	emailId := r.URL.Query().Get("emailId")
 	if emailId == "" {
-		http.Error(w, "userId is required", http.StatusBadRequest)
+		http.Error(w, "emailId is required", http.StatusBadRequest)
 		return
 	}
 
@@ -58,7 +77,7 @@ func (ac *MatchController) GetPings(w http.ResponseWriter, r *http.Request) {
 func (ac *MatchController) GetCurrentMatches(w http.ResponseWriter, r *http.Request) {
 	emailId := r.URL.Query().Get("emailId")
 	if emailId == "" {
-		http.Error(w, "userId is required", http.StatusBadRequest)
+		http.Error(w, "emailId is required", http.StatusBadRequest)
 		return
 	}
 
@@ -78,7 +97,7 @@ func (ac *MatchController) GetCurrentMatches(w http.ResponseWriter, r *http.Requ
 func (ac *MatchController) GetNewLikes(w http.ResponseWriter, r *http.Request) {
 	emailId := r.URL.Query().Get("emailId")
 	if emailId == "" {
-		http.Error(w, "userId is required", http.StatusBadRequest)
+		http.Error(w, "emailId is required", http.StatusBadRequest)
 		return
 	}
 
