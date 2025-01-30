@@ -15,9 +15,9 @@ type ActionService struct {
 }
 
 // GetUserProfile retrieves a user profile by ID
-func (as *ActionService) GetUserProfile(ctx context.Context, userID string) (map[string]types.AttributeValue, error) {
+func (as *ActionService) GetUserProfile(ctx context.Context, emailId string) (map[string]types.AttributeValue, error) {
 	key := map[string]types.AttributeValue{
-		"userId": &types.AttributeValueMemberS{Value: userID},
+		"emailId": &types.AttributeValueMemberS{Value: emailId},
 	}
 	return as.Dynamo.GetItem(ctx, "UserProfiles", key)
 }
