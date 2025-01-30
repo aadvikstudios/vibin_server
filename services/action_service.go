@@ -23,22 +23,46 @@ func (as *ActionService) GetUserProfile(ctx context.Context, userID string) (map
 }
 
 // PingAction processes a ping action between two users
-func (as *ActionService) PingAction(ctx context.Context, userID string, targetUserID string, action string) error {
-	// Retrieve user profile
-	userProfile, err := as.GetUserProfile(ctx, userID)
-	if err != nil || userProfile == nil {
-		return errors.New("user profile not found")
+func (as *ActionService) PingAction(ctx context.Context, emailId string, targetEmailId string, action string, pingNote string) error {
+	// Retrieve sender's profile
+	senderProfile, err := as.GetUserProfile(ctx, emailId)
+	if err != nil || senderProfile == nil {
+		return errors.New("sender profile not found")
 	}
 
-	// Process based on action
-	switch action {
-	case "accept":
-		return as.AcceptPing(ctx, userID, targetUserID)
-	case "decline":
-		return as.DeclinePing(ctx, userID, targetUserID)
-	default:
-		return errors.New("invalid action")
+	// Extract sender details
+	senderName := extractString(senderProfile, "name")
+	senderGender := extractString(senderProfile, "gender")
+	senderPhoto := extractFirstPhoto(senderProfile, "photos")
+
+	// Construct ping object
+	newPing := map[string]types.AttributeValue{
+		"senderEmailId": &types.AttributeValueMemberS{Value: emailId},
+		"name":          &types.AttributeValueMemberS{Value: senderName},
+		"gender":        &types.AttributeValueMemberS{Value: senderGender},
+		"photo":         &types.AttributeValueMemberS{Value: senderPhoto},
+		"pingNote":      &types.AttributeValueMemberS{Value: pingNote},
 	}
+
+	// Append new ping to target user's "pinged" attribute
+	updateExpression := "SET pinged = list_append(if_not_exists(pinged, :empty_list), :new_ping)"
+	expressionAttributeValues := map[string]types.AttributeValue{
+		":new_ping":   &types.AttributeValueMemberL{Value: []types.AttributeValue{&types.AttributeValueMemberM{Value: newPing}}},
+		":empty_list": &types.AttributeValueMemberL{Value: []types.AttributeValue{}},
+	}
+
+	// Define key for the target user's profile
+	key := map[string]types.AttributeValue{
+		"emailId": &types.AttributeValueMemberS{Value: targetEmailId},
+	}
+
+	// Update the target user's profile in DynamoDB
+	_, err = as.Dynamo.UpdateItem(ctx, "UserProfiles", updateExpression, key, expressionAttributeValues, nil)
+	if err != nil {
+		return fmt.Errorf("failed to update target user profile with ping: %w", err)
+	}
+
+	return nil
 }
 
 // AcceptPing accepts a ping and creates a match
@@ -245,4 +269,26 @@ func (as *ActionService) createMatch(ctx context.Context, userID, targetUserID, 
 		"content":   "It's a match! Start chatting now.",
 		"createdAt": currentTime,
 	})
+}
+
+// extractString safely extracts a string from DynamoDB attribute map
+func extractString(profile map[string]types.AttributeValue, field string) string {
+	if attr, ok := profile[field]; ok {
+		if v, ok := attr.(*types.AttributeValueMemberS); ok {
+			return v.Value
+		}
+	}
+	return ""
+}
+
+// extractFirstPhoto extracts the first photo URL from the "photos" attribute
+func extractFirstPhoto(profile map[string]types.AttributeValue, field string) string {
+	if attr, ok := profile[field]; ok {
+		if photos, ok := attr.(*types.AttributeValueMemberL); ok && len(photos.Value) > 0 {
+			if photo, ok := photos.Value[0].(*types.AttributeValueMemberS); ok {
+				return photo.Value
+			}
+		}
+	}
+	return ""
 }

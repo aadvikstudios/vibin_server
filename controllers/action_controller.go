@@ -20,16 +20,17 @@ func NewActionController(actionService *services.ActionService) *ActionControlle
 // HandlePingAction processes ping actions
 func (ac *ActionController) HandlePingAction(w http.ResponseWriter, r *http.Request) {
 	var request struct {
-		UserID       string `json:"userId"`
-		TargetUserID string `json:"targetUserId"`
-		Action       string `json:"action"`
+		EmailId       string `json:"emailId"`
+		TargetEmailId string `json:"targetEmailId"`
+		Action        string `json:"action"`
+		PingNote      string `json:"pingNote"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
 		return
 	}
 
-	err := ac.ActionService.PingAction(context.Background(), request.UserID, request.TargetUserID, request.Action)
+	err := ac.ActionService.PingAction(context.Background(), request.EmailId, request.TargetEmailId, request.Action, request.PingNote)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
