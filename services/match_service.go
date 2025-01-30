@@ -38,17 +38,12 @@ func (as *MatchService) GetPings(ctx context.Context, emailId string) ([]map[str
 	// Enrich each ping with user data
 	for _, ping := range pings {
 		pingData := ping.(*types.AttributeValueMemberM).Value
-		targetUserID := pingData["emailId"].(*types.AttributeValueMemberS).Value
-
-		targetProfile, err := as.GetUserProfile(ctx, targetUserID)
-		if err != nil {
-			continue
-		}
-
 		enrichedPings = append(enrichedPings, map[string]interface{}{
-			"emailId": targetUserID,
-			"name":    targetProfile["name"].(*types.AttributeValueMemberS).Value,
-			"photos":  targetProfile["photos"].(*types.AttributeValueMemberL).Value,
+			"senderEmailId": pingData["senderEmailId"].(*types.AttributeValueMemberS).Value,
+			"pingNote":      pingData["pingNote"].(*types.AttributeValueMemberS).Value,
+			"senderName":    pingData["name"].(*types.AttributeValueMemberS).Value,
+			"senderPhoto":   pingData["photo"].(*types.AttributeValueMemberS).Value,
+			"gender":        pingData["gender"].(*types.AttributeValueMemberS).Value,
 		})
 	}
 
