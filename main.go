@@ -56,6 +56,7 @@ func main() {
 	routes.RegisterActionRoutes(r, actionService)
 	routes.RegisterChatRoutes(r, chatService)
 	routes.RegisterMatchRoutes(r, matchService)
+	routes.RegisterS3Routes(r)
 	log.Println("Routes registered.")
 
 	// Add CORS middleware
