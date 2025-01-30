@@ -44,8 +44,8 @@ func (as *ActionService) PingAction(ctx context.Context, emailId string, targetE
 		"pingNote":      &types.AttributeValueMemberS{Value: pingNote},
 	}
 
-	// Append new ping to target user's "pinged" attribute
-	updateExpression := "SET pinged = list_append(if_not_exists(pinged, :empty_list), :new_ping)"
+	// Append new ping to target user's "pings" attribute
+	updateExpression := "SET pings = list_append(if_not_exists(pings, :empty_list), :new_ping)"
 	expressionAttributeValues := map[string]types.AttributeValue{
 		":new_ping":   &types.AttributeValueMemberL{Value: []types.AttributeValue{&types.AttributeValueMemberM{Value: newPing}}},
 		":empty_list": &types.AttributeValueMemberL{Value: []types.AttributeValue{}},
