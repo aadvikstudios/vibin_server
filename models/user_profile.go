@@ -10,7 +10,7 @@ type UserProfile struct {
 	Bio                 string   `dynamodbav:"bio,omitempty" json:"bio,omitempty"`                                 // Short biography
 	Desires             []string `dynamodbav:"desires,omitempty" json:"desires,omitempty"`                         // User's desires
 	DOB                 string   `dynamodbav:"dob,omitempty" json:"dob,omitempty"`                                 // Date of Birth
-	Age                 int      `json:"age,omitempty"`                                                            // Calculated age
+	Age                 int      `dynamodbav:"age,omitempty" json:"age,omitempty"`                                 // Calculated age
 	Gender              string   `dynamodbav:"gender,omitempty" json:"gender,omitempty"`                           // Gender
 	Interests           []string `dynamodbav:"interests,omitempty" json:"interests,omitempty"`                     // User's interests
 	Latitude            float64  `dynamodbav:"latitude,omitempty" json:"latitude,omitempty"`                       // Latitude of the user's location
