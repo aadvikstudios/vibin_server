@@ -60,6 +60,7 @@ func (as *MatchService) GetPings(ctx context.Context, emailId string) ([]map[str
 		senderGender := utils.ExtractString(senderProfile, "gender")
 		senderOrientation := utils.ExtractString(senderProfile, "orientation")
 		senderAge := utils.ExtractString(senderProfile, "age")
+		fmt.Println("value of senderAge", senderAge)
 		senderPhoto := utils.ExtractFirstPhoto(senderProfile, "photos")
 
 		// Append enriched ping data

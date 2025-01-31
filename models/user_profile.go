@@ -18,7 +18,6 @@ type UserProfile struct {
 	LookingFor          string   `dynamodbav:"lookingFor,omitempty" json:"lookingFor,omitempty"`                   // What the user is looking for
 	Orientation         string   `dynamodbav:"orientation,omitempty" json:"orientation,omitempty"`                 // User's orientation
 	ShowGenderOnProfile bool     `dynamodbav:"showGenderOnProfile,omitempty" json:"showGenderOnProfile,omitempty"` // Show gender on profile or not
-	CountryCode         string   `json:"countryCode,omitempty"`                                                    // Country code
 	Photos              []string `dynamodbav:"photos,omitempty" json:"photos,omitempty"`                           // User's photo URLs
 }
 
