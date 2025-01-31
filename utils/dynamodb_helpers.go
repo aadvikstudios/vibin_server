@@ -1,6 +1,8 @@
 package utils
 
 import (
+	"log"
+
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 )
 
@@ -16,6 +18,8 @@ func ExtractString(profile map[string]types.AttributeValue, field string) string
 
 // ExtractFirstPhoto extracts the first photo URL from the "photos" attribute
 func ExtractFirstPhoto(profile map[string]types.AttributeValue, field string) string {
+
+	log.Println("ExtractFirstPhoto called with field:", field)
 	if attr, ok := profile[field]; ok {
 		if photos, ok := attr.(*types.AttributeValueMemberL); ok && len(photos.Value) > 0 {
 			if photo, ok := photos.Value[0].(*types.AttributeValueMemberS); ok {
