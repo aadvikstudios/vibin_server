@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"vibin_server/models"
+	"vibin_server/utils"
 
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 )
@@ -20,13 +21,15 @@ func (as *MatchService) GetUserProfile(ctx context.Context, emailId string) (map
 	return as.Dynamo.GetItem(ctx, "UserProfiles", key)
 }
 
-// GetPings retrieves the pings for a user
+// GetPings retrieves the pings for a user and enriches them with sender details
 func (as *MatchService) GetPings(ctx context.Context, emailId string) ([]map[string]interface{}, error) {
+	// Fetch the user's profile
 	profile, err := as.GetUserProfile(ctx, emailId)
 	if err != nil || profile == nil {
-		return nil, fmt.Errorf("user profile not found for userId: %s", emailId)
+		return nil, fmt.Errorf("user profile not found for emailId: %s", emailId)
 	}
 
+	// Retrieve "pings" attribute
 	pingsAttr, ok := profile["pings"]
 	if !ok {
 		return []map[string]interface{}{}, nil // No pings, return an empty array
@@ -35,15 +38,35 @@ func (as *MatchService) GetPings(ctx context.Context, emailId string) ([]map[str
 	pings := pingsAttr.(*types.AttributeValueMemberL).Value
 	var enrichedPings []map[string]interface{}
 
-	// Enrich each ping with user data
+	// Iterate through each ping, fetch sender profile, and enrich data
 	for _, ping := range pings {
-		pingData := ping.(*types.AttributeValueMemberM).Value
+		pingData, ok := ping.(*types.AttributeValueMemberM)
+		if !ok {
+			continue
+		}
+
+		// Extract sender email ID from the ping data
+		senderEmailId := utils.ExtractString(pingData.Value, "senderEmailId")
+		pingNote := utils.ExtractString(pingData.Value, "pingNote")
+
+		// Fetch sender's profile
+		senderProfile, err := as.GetUserProfile(ctx, senderEmailId)
+		if err != nil {
+			continue // Skip if sender profile is not found
+		}
+
+		// Extract sender details from the sender's profile
+		senderName := utils.ExtractString(senderProfile, "name")
+		senderGender := utils.ExtractString(senderProfile, "gender")
+		senderPhoto := utils.ExtractFirstPhoto(senderProfile, "photos")
+
+		// Append enriched ping data
 		enrichedPings = append(enrichedPings, map[string]interface{}{
-			"senderEmailId": pingData["senderEmailId"].(*types.AttributeValueMemberS).Value,
-			"pingNote":      pingData["pingNote"].(*types.AttributeValueMemberS).Value,
-			"senderName":    pingData["name"].(*types.AttributeValueMemberS).Value,
-			"senderPhoto":   pingData["photo"].(*types.AttributeValueMemberS).Value,
-			"gender":        pingData["gender"].(*types.AttributeValueMemberS).Value,
+			"senderEmailId": senderEmailId,
+			"senderName":    senderName,
+			"senderGender":  senderGender,
+			"senderPhoto":   senderPhoto,
+			"pingNote":      pingNote,
 		})
 	}
 

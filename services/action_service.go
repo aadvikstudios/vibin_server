@@ -24,24 +24,12 @@ func (as *ActionService) GetUserProfile(ctx context.Context, emailId string) (ma
 
 // PingAction processes a ping action between two users
 func (as *ActionService) PingAction(ctx context.Context, emailId string, targetEmailId string, action string, pingNote string) error {
-	// Retrieve sender's profile
-	senderProfile, err := as.GetUserProfile(ctx, emailId)
-	if err != nil || senderProfile == nil {
-		return errors.New("sender profile not found")
-	}
-
-	// Extract sender details
-	senderName := extractString(senderProfile, "name")
-	senderGender := extractString(senderProfile, "gender")
-	senderPhoto := extractFirstPhoto(senderProfile, "photos")
-
+	createdAt := time.Now().UTC().Format(time.RFC3339)
 	// Construct ping object
 	newPing := map[string]types.AttributeValue{
 		"senderEmailId": &types.AttributeValueMemberS{Value: emailId},
-		"name":          &types.AttributeValueMemberS{Value: senderName},
-		"gender":        &types.AttributeValueMemberS{Value: senderGender},
-		"photo":         &types.AttributeValueMemberS{Value: senderPhoto},
 		"pingNote":      &types.AttributeValueMemberS{Value: pingNote},
+		"createdAt":     &types.AttributeValueMemberS{Value: createdAt},
 	}
 
 	// Append new ping to target user's "pings" attribute
@@ -57,7 +45,7 @@ func (as *ActionService) PingAction(ctx context.Context, emailId string, targetE
 	}
 
 	// Update the target user's profile in DynamoDB
-	_, err = as.Dynamo.UpdateItem(ctx, "UserProfiles", updateExpression, key, expressionAttributeValues, nil)
+	_, err := as.Dynamo.UpdateItem(ctx, "UserProfiles", updateExpression, key, expressionAttributeValues, nil)
 	if err != nil {
 		return fmt.Errorf("failed to update target user profile with ping: %w", err)
 	}
@@ -269,26 +257,4 @@ func (as *ActionService) createMatch(ctx context.Context, userID, targetUserID, 
 		"content":   "It's a match! Start chatting now.",
 		"createdAt": currentTime,
 	})
-}
-
-// extractString safely extracts a string from DynamoDB attribute map
-func extractString(profile map[string]types.AttributeValue, field string) string {
-	if attr, ok := profile[field]; ok {
-		if v, ok := attr.(*types.AttributeValueMemberS); ok {
-			return v.Value
-		}
-	}
-	return ""
-}
-
-// extractFirstPhoto extracts the first photo URL from the "photos" attribute
-func extractFirstPhoto(profile map[string]types.AttributeValue, field string) string {
-	if attr, ok := profile[field]; ok {
-		if photos, ok := attr.(*types.AttributeValueMemberL); ok && len(photos.Value) > 0 {
-			if photo, ok := photos.Value[0].(*types.AttributeValueMemberS); ok {
-				return photo.Value
-			}
-		}
-	}
-	return ""
 }
