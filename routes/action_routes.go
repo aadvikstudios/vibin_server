@@ -17,6 +17,6 @@ func RegisterActionRoutes(r *mux.Router, actionService *services.ActionService) 
 
 	// Define routes and their corresponding handlers
 	actionRouter.HandleFunc("/sendPing", controller.HandleSendPing).Methods("POST")
-	// actionRouter.HandleFunc("/pingActionGet", controller.HandlePingAction).Methods("POST")
 	actionRouter.HandleFunc("/action", controller.HandleAction).Methods("POST")
+	actionRouter.HandleFunc("/pingAction", controller.HandlePingAction).Methods("POST")
 }
