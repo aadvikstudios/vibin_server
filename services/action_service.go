@@ -23,7 +23,7 @@ func (as *ActionService) GetUserProfile(ctx context.Context, emailId string) (ma
 }
 
 // PingAction processes a ping action between two users
-func (as *ActionService) PingAction(ctx context.Context, emailId string, targetEmailId string, action string, pingNote string) error {
+func (as *ActionService) SendPing(ctx context.Context, emailId string, targetEmailId string, action string, pingNote string) error {
 	createdAt := time.Now().UTC().Format(time.RFC3339)
 	// Construct ping object
 	newPing := map[string]types.AttributeValue{

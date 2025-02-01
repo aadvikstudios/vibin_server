@@ -18,7 +18,7 @@ func NewActionController(actionService *services.ActionService) *ActionControlle
 }
 
 // HandlePingAction processes ping actions
-func (ac *ActionController) HandlePingAction(w http.ResponseWriter, r *http.Request) {
+func (ac *ActionController) HandleSendPing(w http.ResponseWriter, r *http.Request) {
 	var request struct {
 		EmailId       string `json:"emailId"`
 		TargetEmailId string `json:"targetEmailId"`
@@ -30,7 +30,7 @@ func (ac *ActionController) HandlePingAction(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	err := ac.ActionService.PingAction(context.Background(), request.EmailId, request.TargetEmailId, request.Action, request.PingNote)
+	err := ac.ActionService.SendPing(context.Background(), request.EmailId, request.TargetEmailId, request.Action, request.PingNote)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

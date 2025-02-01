@@ -16,9 +16,7 @@ func RegisterActionRoutes(r *mux.Router, actionService *services.ActionService) 
 	actionRouter := r.PathPrefix("/api/action").Subrouter()
 
 	// Define routes and their corresponding handlers
-	actionRouter.HandleFunc("/pingAction", controller.HandlePingAction).Methods("POST")
+	actionRouter.HandleFunc("/sendPing", controller.HandleSendPing).Methods("POST")
+	// actionRouter.HandleFunc("/pingActionGet", controller.HandlePingAction).Methods("POST")
 	actionRouter.HandleFunc("/action", controller.HandleAction).Methods("POST")
-	// actionRouter.HandleFunc("/currentMatches", controller.GetCurrentMatches).Methods("GET")
-	// actionRouter.HandleFunc("/newLikes", controller.GetNewLikes).Methods("GET")
-	// actionRouter.HandleFunc("/pings", controller.GetPings).Methods("GET")
 }
