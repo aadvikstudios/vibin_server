@@ -63,7 +63,7 @@ func (as *MatchService) GetPings(ctx context.Context, emailId string) ([]map[str
 	return enrichedPings, nil
 }
 
-// GetCurrentMatches retrieves the matches for a user
+// GetCurrentMatches retrieves the matches for a user and enriches them with messages data.
 func (as *MatchService) GetCurrentMatches(ctx context.Context, emailId string) ([]map[string]interface{}, error) {
 	profile, err := as.GetUserProfile(ctx, emailId)
 	if err != nil || profile == nil {
@@ -82,15 +82,29 @@ func (as *MatchService) GetCurrentMatches(ctx context.Context, emailId string) (
 		matchData := match.(*types.AttributeValueMemberM).Value
 		matchUserID := matchData["emailId"].(*types.AttributeValueMemberS).Value
 
+		// Fetch target profile details
 		targetProfile, err := as.GetUserProfile(ctx, matchUserID)
 		if err != nil {
 			continue
 		}
 
+		// Extract necessary fields
+		name := utils.ExtractString(targetProfile, "name")
+		photo := utils.ExtractFirstPhoto(targetProfile, "photos") // First photo URL
+		matchID := utils.ExtractString(matchData, "matchId")
+
+		// Fetch latest message details
+		lastMessage, isUnread, senderId := as.GetLastMessage(ctx, matchID, emailId)
+
+		// Append to matchedProfiles
 		matchedProfiles = append(matchedProfiles, map[string]interface{}{
-			"emailId": matchUserID,
-			"name":    utils.ExtractString(targetProfile, "name"),
-			"photos":  utils.ExtractPhotoURLs(targetProfile), // Use the new function
+			"matchId":     matchID,
+			"emailId":     matchUserID,
+			"name":        name,
+			"photo":       photo,
+			"lastMessage": lastMessage,
+			"isUnread":    isUnread,
+			"senderId":    senderId,
 		})
 	}
 
@@ -192,4 +206,27 @@ func (as *MatchService) GetFilteredProfiles(
 	}
 
 	return profiles, nil
+}
+
+// GetLastMessage fetches the latest message for a match
+func (as *MatchService) GetLastMessage(ctx context.Context, matchID, emailId string) (string, bool, string) {
+	// Query DynamoDB to get the latest message for this match
+	filterExpression := "matchId = :matchId"
+	expressionAttributeValues := map[string]types.AttributeValue{
+		":matchId": &types.AttributeValueMemberS{Value: matchID},
+	}
+
+	// Query the Messages table sorted by timestamp
+	messages, err := as.Dynamo.QueryItems(ctx, "Messages", filterExpression, expressionAttributeValues, nil, 1)
+	if err != nil || len(messages) == 0 {
+		return "", false, "" // No messages found
+	}
+
+	// Extract last message details
+	messageItem := messages[0]
+	lastMessage := utils.ExtractString(messageItem, "content")
+	senderId := utils.ExtractString(messageItem, "senderId")
+	isUnread := utils.ExtractBool(messageItem, "isUnread") && senderId != emailId // Only unread if sender is not the user
+
+	return lastMessage, isUnread, senderId
 }

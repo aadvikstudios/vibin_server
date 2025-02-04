@@ -30,9 +30,25 @@ func ExtractInt(profile map[string]types.AttributeValue, field string) int {
 	return 0 // Return 0 if conversion fails or field is missing
 }
 
+// ExtractBool safely extracts a boolean value from DynamoDB attribute map
+func ExtractBool(profile map[string]types.AttributeValue, field string) bool {
+	if attr, ok := profile[field]; ok {
+		switch v := attr.(type) {
+		case *types.AttributeValueMemberBOOL:
+			return v.Value
+		case *types.AttributeValueMemberS:
+			// Handle cases where the boolean is stored as a string
+			return v.Value == "true"
+		case *types.AttributeValueMemberN:
+			// Handle cases where the boolean is stored as a number (1 for true, 0 for false)
+			return v.Value == "1"
+		}
+	}
+	return false // Default to false if the field is missing or not a valid boolean
+}
+
 // ExtractFirstPhoto extracts the first photo URL from the "photos" attribute
 func ExtractFirstPhoto(profile map[string]types.AttributeValue, field string) string {
-
 	log.Println("ExtractFirstPhoto called with field:", field)
 	if attr, ok := profile[field]; ok {
 		if photos, ok := attr.(*types.AttributeValueMemberL); ok && len(photos.Value) > 0 {
