@@ -125,6 +125,7 @@ func (as *ActionService) DeclinePing(ctx context.Context, emailId, targetEmailId
 
 // handleLiked processes a "liked" action
 func (as *ActionService) handleLiked(ctx context.Context, emailId, targetEmailId string) (map[string]string, error) {
+	// Fetch the target user's profile
 	targetProfile, err := as.GetUserProfile(ctx, targetEmailId)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch target user profile: %w", err)
@@ -135,6 +136,7 @@ func (as *ActionService) handleLiked(ctx context.Context, emailId, targetEmailId
 		likedUsers := likedAttr.(*types.AttributeValueMemberL).Value
 		for _, user := range likedUsers {
 			if user.(*types.AttributeValueMemberS).Value == emailId {
+				// Create a match if mutual like exists
 				matchID := uuid.NewString()
 				err := as.createMatch(ctx, emailId, targetEmailId, matchID)
 				if err != nil {
@@ -145,14 +147,20 @@ func (as *ActionService) handleLiked(ctx context.Context, emailId, targetEmailId
 		}
 	}
 
-	// Append to liked list
-	_, err = as.Dynamo.UpdateItem(ctx, "UserProfiles", "SET liked = list_append(if_not_exists(liked, :empty), :targetEmailId)", map[string]types.AttributeValue{
+	// Append to the "liked" list
+	updateExpression := "SET liked = list_append(if_not_exists(liked, :empty), :targetEmailIdList)"
+	key := map[string]types.AttributeValue{
 		"emailId": &types.AttributeValueMemberS{Value: emailId},
-	}, map[string]types.AttributeValue{
-		":empty":         &types.AttributeValueMemberL{Value: []types.AttributeValue{}},
-		":targetEmailId": &types.AttributeValueMemberS{Value: targetEmailId},
-	}, nil)
+	}
+	expressionAttributeValues := map[string]types.AttributeValue{
+		":empty": &types.AttributeValueMemberL{Value: []types.AttributeValue{}}, // An empty list if "liked" does not exist
+		":targetEmailIdList": &types.AttributeValueMemberL{Value: []types.AttributeValue{
+			&types.AttributeValueMemberS{Value: targetEmailId}, // Wrap targetEmailId in a list
+		}},
+	}
 
+	// Update the item in DynamoDB
+	_, err = as.Dynamo.UpdateItem(ctx, "UserProfiles", updateExpression, key, expressionAttributeValues, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update liked list: %w", err)
 	}
@@ -162,13 +170,20 @@ func (as *ActionService) handleLiked(ctx context.Context, emailId, targetEmailId
 
 // handleNotLiked processes a "notliked" action
 func (as *ActionService) handleNotLiked(ctx context.Context, emailId, targetEmailId string) (map[string]string, error) {
-	_, err := as.Dynamo.UpdateItem(ctx, "UserProfiles", "SET notLiked = list_append(if_not_exists(notLiked, :empty), :targetEmailId)", map[string]types.AttributeValue{
+	// UpdateExpression to append the targetEmailId to the "notLiked" list
+	updateExpression := "SET notLiked = list_append(if_not_exists(notLiked, :empty), :targetEmailIdList)"
+	key := map[string]types.AttributeValue{
 		"emailId": &types.AttributeValueMemberS{Value: emailId},
-	}, map[string]types.AttributeValue{
-		":empty":         &types.AttributeValueMemberL{Value: []types.AttributeValue{}},
-		":targetEmailId": &types.AttributeValueMemberS{Value: targetEmailId},
-	}, nil)
+	}
+	expressionAttributeValues := map[string]types.AttributeValue{
+		":empty": &types.AttributeValueMemberL{Value: []types.AttributeValue{}}, // An empty list if "notLiked" does not exist
+		":targetEmailIdList": &types.AttributeValueMemberL{Value: []types.AttributeValue{
+			&types.AttributeValueMemberS{Value: targetEmailId}, // Wrap targetEmailId in a list
+		}},
+	}
 
+	// Update the item in DynamoDB
+	_, err := as.Dynamo.UpdateItem(ctx, "UserProfiles", updateExpression, key, expressionAttributeValues, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update notLiked list: %w", err)
 	}
