@@ -129,9 +129,9 @@ func (as *MatchService) GetNewLikes(ctx context.Context, userID string) ([]map[s
 
 	// Fetch and enrich profiles for each "likedBy" user
 	for _, liked := range likedBy {
-		likedUserID := liked.(*types.AttributeValueMemberS).Value
+		likedEmailId := liked.(*types.AttributeValueMemberS).Value
 
-		likedProfile, err := as.GetUserProfile(ctx, likedUserID)
+		likedProfile, err := as.GetUserProfile(ctx, likedEmailId)
 		if err != nil {
 			continue
 		}
@@ -150,9 +150,9 @@ func (as *MatchService) GetNewLikes(ctx context.Context, userID string) ([]map[s
 
 		// Append enriched profile data
 		likedProfiles = append(likedProfiles, map[string]interface{}{
-			"userId": likedUserID,
-			"name":   likedProfile["name"].(*types.AttributeValueMemberS).Value,
-			"photos": photoURLs, // Photos as a slice of strings
+			"emailId": likedEmailId,
+			"name":    likedProfile["name"].(*types.AttributeValueMemberS).Value,
+			"photos":  photoURLs, // Photos as a slice of strings
 		})
 	}
 
