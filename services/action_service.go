@@ -247,3 +247,20 @@ func (as *ActionService) createMatch(ctx context.Context, emailId, targetEmailId
 
 	return nil
 }
+
+func (as *ActionService) getListIndex(ctx context.Context, emailId, listName, targetEmailId string) string {
+	profile, err := as.GetUserProfile(ctx, emailId)
+	if err != nil {
+		return ""
+	}
+
+	if listAttr, ok := profile[listName]; ok {
+		listValues := listAttr.(*types.AttributeValueMemberL).Value
+		for i, user := range listValues {
+			if user.(*types.AttributeValueMemberS).Value == targetEmailId {
+				return fmt.Sprintf("%d", i)
+			}
+		}
+	}
+	return ""
+}
