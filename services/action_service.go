@@ -97,6 +97,7 @@ func (as *ActionService) AcceptPing(ctx context.Context, emailId, targetEmailId,
 		"content":   pingNote,
 		"createdAt": time.Now().Format(time.RFC3339),
 		"liked":     false,
+		"isUnread":  true,
 	}
 
 	err = as.Dynamo.PutItem(ctx, "Messages", message)
