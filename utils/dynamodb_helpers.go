@@ -43,3 +43,18 @@ func ExtractFirstPhoto(profile map[string]types.AttributeValue, field string) st
 	}
 	return ""
 }
+
+// ExtractPhotoURLs extracts photo URLs from a DynamoDB attribute
+func ExtractPhotoURLs(profile map[string]types.AttributeValue) []string {
+	photoURLs := []string{}
+	if photosAttr, ok := profile["photos"]; ok {
+		if photos, ok := photosAttr.(*types.AttributeValueMemberL); ok {
+			for _, photo := range photos.Value {
+				if photoURL, ok := photo.(*types.AttributeValueMemberS); ok {
+					photoURLs = append(photoURLs, photoURL.Value)
+				}
+			}
+		}
+	}
+	return photoURLs
+}
