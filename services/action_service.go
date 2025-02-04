@@ -147,22 +147,40 @@ func (as *ActionService) handleLiked(ctx context.Context, emailId, targetEmailId
 		}
 	}
 
-	// Append to the "liked" list
-	updateExpression := "SET liked = list_append(if_not_exists(liked, :empty), :targetEmailIdList)"
-	key := map[string]types.AttributeValue{
+	// Add targetEmailId to the "liked[]" list for the emailId profile
+	updateExpressionLiked := "SET liked = list_append(if_not_exists(liked, :empty), :targetEmailIdList)"
+	keyLiked := map[string]types.AttributeValue{
 		"emailId": &types.AttributeValueMemberS{Value: emailId},
 	}
-	expressionAttributeValues := map[string]types.AttributeValue{
+	expressionAttributeValuesLiked := map[string]types.AttributeValue{
 		":empty": &types.AttributeValueMemberL{Value: []types.AttributeValue{}}, // An empty list if "liked" does not exist
 		":targetEmailIdList": &types.AttributeValueMemberL{Value: []types.AttributeValue{
 			&types.AttributeValueMemberS{Value: targetEmailId}, // Wrap targetEmailId in a list
 		}},
 	}
 
-	// Update the item in DynamoDB
-	_, err = as.Dynamo.UpdateItem(ctx, "UserProfiles", updateExpression, key, expressionAttributeValues, nil)
+	// Update the liked[] list for the emailId profile
+	_, err = as.Dynamo.UpdateItem(ctx, "UserProfiles", updateExpressionLiked, keyLiked, expressionAttributeValuesLiked, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to update liked list: %w", err)
+		return nil, fmt.Errorf("failed to update liked list for emailId profile: %w", err)
+	}
+
+	// Add emailId to the "likedBy[]" list for the targetEmailId profile
+	updateExpressionLikedBy := "SET likedBy = list_append(if_not_exists(likedBy, :empty), :emailIdList)"
+	keyLikedBy := map[string]types.AttributeValue{
+		"emailId": &types.AttributeValueMemberS{Value: targetEmailId},
+	}
+	expressionAttributeValuesLikedBy := map[string]types.AttributeValue{
+		":empty": &types.AttributeValueMemberL{Value: []types.AttributeValue{}}, // An empty list if "likedBy" does not exist
+		":emailIdList": &types.AttributeValueMemberL{Value: []types.AttributeValue{
+			&types.AttributeValueMemberS{Value: emailId}, // Wrap emailId in a list
+		}},
+	}
+
+	// Update the likedBy[] list for the targetEmailId profile
+	_, err = as.Dynamo.UpdateItem(ctx, "UserProfiles", updateExpressionLikedBy, keyLikedBy, expressionAttributeValuesLikedBy, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update likedBy list for targetEmailId profile: %w", err)
 	}
 
 	return map[string]string{"message": "User liked successfully"}, nil
