@@ -136,10 +136,23 @@ func (as *MatchService) GetNewLikes(ctx context.Context, userID string) ([]map[s
 			continue
 		}
 
+		// Extract photos as a slice of strings
+		photoURLs := []string{}
+		if photosAttr, ok := likedProfile["photos"]; ok {
+			if photos, ok := photosAttr.(*types.AttributeValueMemberL); ok {
+				for _, photo := range photos.Value {
+					if photoURL, ok := photo.(*types.AttributeValueMemberS); ok {
+						photoURLs = append(photoURLs, photoURL.Value)
+					}
+				}
+			}
+		}
+
+		// Append enriched profile data
 		likedProfiles = append(likedProfiles, map[string]interface{}{
 			"userId": likedUserID,
 			"name":   likedProfile["name"].(*types.AttributeValueMemberS).Value,
-			"photos": likedProfile["photos"].(*types.AttributeValueMemberL).Value,
+			"photos": photoURLs, // Photos as a slice of strings
 		})
 	}
 
