@@ -55,23 +55,29 @@ func (cs *ChatService) GetMessagesByMatchID(matchID string) ([]Message, error) {
 
 // MarkMessagesAsRead marks all messages as read for a match ID
 func (cs *ChatService) MarkMessagesAsRead(matchID string) error {
-	// Fetch messages and update the `Read` attribute for each
+	// Fetch messages for the given matchID
 	messages, err := cs.GetMessagesByMatchID(matchID)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to fetch messages: %w", err)
 	}
 
 	for _, message := range messages {
-		_, err := cs.Dynamo.UpdateItem(context.TODO(), "Messages", "SET read = :read", map[string]types.AttributeValue{
+		// Update the `isUnread` attribute to false
+		updateExpression := "SET isUnread = :falseValue"
+		key := map[string]types.AttributeValue{
 			"matchId":   &types.AttributeValueMemberS{Value: message.MatchID},
-			"createdAt": &types.AttributeValueMemberS{Value: message.CreatedAt},
-		}, map[string]types.AttributeValue{
-			":read": &types.AttributeValueMemberBOOL{Value: true},
-		}, nil)
+			"messageId": &types.AttributeValueMemberS{Value: message.MessageID},
+		}
+		expressionAttributeValues := map[string]types.AttributeValue{
+			":falseValue": &types.AttributeValueMemberBOOL{Value: false},
+		}
+
+		_, err := cs.Dynamo.UpdateItem(context.TODO(), "Messages", updateExpression, key, expressionAttributeValues, nil)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to update isUnread for messageId %s: %w", message.MessageID, err)
 		}
 	}
+
 	return nil
 }
 
