@@ -125,23 +125,16 @@ func (ds *DynamoService) DeleteItem(ctx context.Context, tableName string, key m
 func (ds *DynamoService) ScanWithFilter(
 	ctx context.Context,
 	tableName string,
-	filters map[string]string,
-	excludeFields map[string]string,
-	result interface{}, // Pass the result as a pointer to a slice of structs
+	filterFunc func(map[string]types.AttributeValue) bool, // Callback for additional filtering
+	excludeFields map[string]string, // Fields to exclude specific values
+	result interface{}, // Pointer to a slice of structs to store results
 ) error {
 	// Build FilterExpression
 	var filterExpressions []string
 	expressionAttributeNames := map[string]string{}
 	expressionAttributeValues := map[string]types.AttributeValue{}
 
-	// Include filters
-	for key, value := range filters {
-		expressionAttributeNames["#"+key] = key
-		expressionAttributeValues[":"+key] = &types.AttributeValueMemberS{Value: value}
-		filterExpressions = append(filterExpressions, fmt.Sprintf("#%s = :%s", key, key))
-	}
-
-	// Exclude filters
+	// Exclude fields
 	for key, value := range excludeFields {
 		expressionAttributeNames["#"+key] = key
 		expressionAttributeValues[":"+key] = &types.AttributeValueMemberS{Value: value}
@@ -151,22 +144,32 @@ func (ds *DynamoService) ScanWithFilter(
 	// Combine expressions
 	filterExpression := ""
 	if len(filterExpressions) > 0 {
-		filterExpression = fmt.Sprintf("(%s)", stringJoin(filterExpressions, " AND "))
+		filterExpression = stringJoin(filterExpressions, " AND ")
 	}
 
-	// Perform scan with filters
-	output, err := ds.Client.Scan(ctx, &dynamodb.ScanInput{
+	// Perform a full scan of the DynamoDB table
+	scanInput := &dynamodb.ScanInput{
 		TableName:                 &tableName,
 		FilterExpression:          &filterExpression,
 		ExpressionAttributeNames:  expressionAttributeNames,
 		ExpressionAttributeValues: expressionAttributeValues,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to scan table '%s' with filters: %w", tableName, err)
 	}
 
-	// Unmarshal items into the result
-	if err := attributevalue.UnmarshalListOfMaps(output.Items, result); err != nil {
+	output, err := ds.Client.Scan(ctx, scanInput)
+	if err != nil {
+		return fmt.Errorf("failed to scan table '%s': %w", tableName, err)
+	}
+
+	// Apply the additional filtering callback if provided
+	var filteredItems []map[string]types.AttributeValue
+	for _, item := range output.Items {
+		if filterFunc == nil || filterFunc(item) {
+			filteredItems = append(filteredItems, item)
+		}
+	}
+
+	// Unmarshal filtered items into the result
+	if err := attributevalue.UnmarshalListOfMaps(filteredItems, result); err != nil {
 		return fmt.Errorf("failed to unmarshal scan result: %w", err)
 	}
 

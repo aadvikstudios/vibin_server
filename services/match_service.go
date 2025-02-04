@@ -151,10 +151,42 @@ func (as *MatchService) GetFilteredProfiles(
 	emailId, gender string,
 	additionalFilters map[string]string,
 ) ([]models.UserProfile, error) {
-	// Prepare filters and exclusions
+	// Fetch the user's profile to get liked, notLiked, and matches
+	userProfile, err := as.GetUserProfile(ctx, emailId)
+	if err != nil || userProfile == nil {
+		return nil, fmt.Errorf("failed to fetch user profile for emailId: %s", emailId)
+	}
+
+	// Prepare exclusion filters
+	excludeEmails := map[string]struct{}{}
+	excludeEmails[emailId] = struct{}{} // Exclude the user themselves
+
+	// Add liked[] to exclusion
+	if likedAttr, ok := userProfile["liked"]; ok {
+		for _, liked := range likedAttr.(*types.AttributeValueMemberL).Value {
+			excludeEmails[liked.(*types.AttributeValueMemberS).Value] = struct{}{}
+		}
+	}
+
+	// Add notLiked[] to exclusion
+	if notLikedAttr, ok := userProfile["notLiked"]; ok {
+		for _, notLiked := range notLikedAttr.(*types.AttributeValueMemberL).Value {
+			excludeEmails[notLiked.(*types.AttributeValueMemberS).Value] = struct{}{}
+		}
+	}
+
+	// Add matches[] to exclusion
+	if matchesAttr, ok := userProfile["matches"]; ok {
+		for _, match := range matchesAttr.(*types.AttributeValueMemberL).Value {
+			matchData := match.(*types.AttributeValueMemberM).Value
+			matchEmailId := matchData["emailId"].(*types.AttributeValueMemberS).Value
+			excludeEmails[matchEmailId] = struct{}{}
+		}
+	}
+
+	// Build filters for DynamoDB scan
 	excludeFields := map[string]string{
-		"emailId": emailId,
-		"gender":  gender,
+		"gender": gender, // Exclude same gender
 	}
 
 	// Merge additional filters
@@ -162,11 +194,17 @@ func (as *MatchService) GetFilteredProfiles(
 		excludeFields[key] = value
 	}
 
-	// Prepare result slice
+	// Use DynamoService to scan profiles with filters
 	var profiles []models.UserProfile
-
-	// Use DynamoService to scan with filters
-	if err := as.Dynamo.ScanWithFilter(ctx, models.UserProfilesTable, nil, excludeFields, &profiles); err != nil {
+	err = as.Dynamo.ScanWithFilter(ctx, models.UserProfilesTable, func(profile map[string]types.AttributeValue) bool {
+		// Exclude profiles based on emailId
+		emailId := profile["emailId"].(*types.AttributeValueMemberS).Value
+		if _, excluded := excludeEmails[emailId]; excluded {
+			return false
+		}
+		return true
+	}, excludeFields, &profiles)
+	if err != nil {
 		return nil, fmt.Errorf("failed to fetch filtered profiles: %w", err)
 	}
 
