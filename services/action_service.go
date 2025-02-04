@@ -228,20 +228,34 @@ func (as *ActionService) handleNotLiked(ctx context.Context, emailId, targetEmai
 // createMatch creates a match between two users
 func (as *ActionService) createMatch(ctx context.Context, emailId, targetEmailId, matchID string) error {
 
+	// Map to store each user’s match data
+	matchData := map[string]map[string]types.AttributeValue{
+		emailId: {
+			"matchId": &types.AttributeValueMemberS{Value: matchID},
+			"emailId": &types.AttributeValueMemberS{Value: targetEmailId}, // Store the other user's emailId
+		},
+		targetEmailId: {
+			"matchId": &types.AttributeValueMemberS{Value: matchID},
+			"emailId": &types.AttributeValueMemberS{Value: emailId}, // Store the other user's emailId
+		},
+	}
+
 	// Add match entry for both users
-	for _, user := range []string{emailId, targetEmailId} {
-		_, err := as.Dynamo.UpdateItem(ctx, "UserProfiles", "SET matches = list_append(if_not_exists(matches, :empty), :newMatch)", map[string]types.AttributeValue{
-			"emailId": &types.AttributeValueMemberS{Value: user},
-		}, map[string]types.AttributeValue{
-			":empty": &types.AttributeValueMemberL{Value: []types.AttributeValue{}},
-			":newMatch": &types.AttributeValueMemberL{Value: []types.AttributeValue{
-				&types.AttributeValueMemberM{Value: map[string]types.AttributeValue{
-					"matchId": &types.AttributeValueMemberS{Value: matchID},
-					"emailId": &types.AttributeValueMemberS{Value: targetEmailId},
-				}}}},
-		}, nil)
+	for user, match := range matchData {
+		_, err := as.Dynamo.UpdateItem(ctx, "UserProfiles",
+			"SET matches = list_append(if_not_exists(matches, :empty), :newMatch)",
+			map[string]types.AttributeValue{
+				"emailId": &types.AttributeValueMemberS{Value: user}, // The current user
+			},
+			map[string]types.AttributeValue{
+				":empty": &types.AttributeValueMemberL{Value: []types.AttributeValue{}},
+				":newMatch": &types.AttributeValueMemberL{Value: []types.AttributeValue{
+					&types.AttributeValueMemberM{Value: match}, // Add the other user's emailId in match
+				}},
+			}, nil)
+
 		if err != nil {
-			return fmt.Errorf("failed to create match: %w", err)
+			return fmt.Errorf("failed to create match for user %s: %w", user, err)
 		}
 	}
 
