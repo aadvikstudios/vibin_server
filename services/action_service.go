@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"vibin_server/utils"
 
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/google/uuid"
@@ -89,18 +90,8 @@ func (as *ActionService) AcceptPing(ctx context.Context, emailId, targetEmailId,
 		return nil, fmt.Errorf("failed to create match: %w", err)
 	}
 
-	// Add match message in Messages table
-	message := map[string]interface{}{
-		"messageId": uuid.NewString(),
-		"matchId":   matchID,
-		"senderId":  targetEmailId,
-		"content":   pingNote,
-		"createdAt": time.Now().Format(time.RFC3339),
-		"liked":     false,
-		"isUnread":  true,
-	}
-
-	err = as.Dynamo.PutItem(ctx, "Messages", message)
+	// Use CreateMessage to insert a message
+	err = as.CreateMessage(ctx, matchID, targetEmailId, pingNote, false, true)
 	if err != nil {
 		return nil, fmt.Errorf("failed to add match message: %w", err)
 	}
@@ -143,7 +134,7 @@ func (as *ActionService) handleLiked(ctx context.Context, emailId, targetEmailId
 					return nil, err
 				}
 
-				// Step 1: Remove targetEmailId from likedBy[] in emailId's profile
+				// Remove targetEmailId from likedBy[] in emailId's profile
 				updateExpressionLikedBy := "REMOVE likedBy[" + as.getListIndex(ctx, emailId, "likedBy", targetEmailId) + "]"
 				_, err = as.Dynamo.UpdateItem(ctx, "UserProfiles", updateExpressionLikedBy, map[string]types.AttributeValue{
 					"emailId": &types.AttributeValueMemberS{Value: emailId},
@@ -152,13 +143,20 @@ func (as *ActionService) handleLiked(ctx context.Context, emailId, targetEmailId
 					return nil, fmt.Errorf("failed to remove targetEmailId from likedBy[]: %w", err)
 				}
 
-				// Step 2: Remove emailId from liked[] in targetEmailId's profile
+				// Remove emailId from liked[] in targetEmailId's profile
 				updateExpressionLiked := "REMOVE liked[" + as.getListIndex(ctx, targetEmailId, "liked", emailId) + "]"
 				_, err = as.Dynamo.UpdateItem(ctx, "UserProfiles", updateExpressionLiked, map[string]types.AttributeValue{
 					"emailId": &types.AttributeValueMemberS{Value: targetEmailId},
 				}, nil, nil)
 				if err != nil {
 					return nil, fmt.Errorf("failed to remove emailId from liked[]: %w", err)
+				}
+
+				// Use CreateMessage to insert a welcome message when a match is created
+				messageContent := "You have matched with " + utils.ExtractString(targetProfile, "name") + "! Say Hi!"
+				err = as.CreateMessage(ctx, matchID, emailId, messageContent, false, true)
+				if err != nil {
+					return nil, fmt.Errorf("failed to add match message: %w", err)
 				}
 
 				return map[string]string{"message": "It's a match!", "matchId": matchID}, nil
@@ -278,4 +276,23 @@ func (as *ActionService) getListIndex(ctx context.Context, emailId, listName, ta
 		}
 	}
 	return ""
+}
+
+// CreateMessage adds a new message to the Messages table
+func (as *ActionService) CreateMessage(ctx context.Context, matchID, senderID, content string, liked bool, isUnread bool) error {
+	message := map[string]interface{}{
+		"messageId": uuid.NewString(),
+		"matchId":   matchID,
+		"senderId":  senderID,
+		"content":   content,
+		"createdAt": time.Now().Format(time.RFC3339),
+		"liked":     liked,
+		"isUnread":  isUnread,
+	}
+
+	err := as.Dynamo.PutItem(ctx, "Messages", message)
+	if err != nil {
+		return fmt.Errorf("failed to add message: %w", err)
+	}
+	return nil
 }
