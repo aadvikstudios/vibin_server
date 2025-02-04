@@ -123,7 +123,6 @@ func (as *ActionService) DeclinePing(ctx context.Context, emailId, targetEmailId
 	return nil
 }
 
-// handleLiked processes a "liked" action
 func (as *ActionService) handleLiked(ctx context.Context, emailId, targetEmailId string) (map[string]string, error) {
 	// Fetch the target user's profile
 	targetProfile, err := as.GetUserProfile(ctx, targetEmailId)
@@ -142,6 +141,25 @@ func (as *ActionService) handleLiked(ctx context.Context, emailId, targetEmailId
 				if err != nil {
 					return nil, err
 				}
+
+				// Step 1: Remove targetEmailId from likedBy[] in emailId's profile
+				updateExpressionLikedBy := "REMOVE likedBy[" + as.getListIndex(ctx, emailId, "likedBy", targetEmailId) + "]"
+				_, err = as.Dynamo.UpdateItem(ctx, "UserProfiles", updateExpressionLikedBy, map[string]types.AttributeValue{
+					"emailId": &types.AttributeValueMemberS{Value: emailId},
+				}, nil, nil)
+				if err != nil {
+					return nil, fmt.Errorf("failed to remove targetEmailId from likedBy[]: %w", err)
+				}
+
+				// Step 2: Remove emailId from liked[] in targetEmailId's profile
+				updateExpressionLiked := "REMOVE liked[" + as.getListIndex(ctx, targetEmailId, "liked", emailId) + "]"
+				_, err = as.Dynamo.UpdateItem(ctx, "UserProfiles", updateExpressionLiked, map[string]types.AttributeValue{
+					"emailId": &types.AttributeValueMemberS{Value: targetEmailId},
+				}, nil, nil)
+				if err != nil {
+					return nil, fmt.Errorf("failed to remove emailId from liked[]: %w", err)
+				}
+
 				return map[string]string{"message": "It's a match!", "matchId": matchID}, nil
 			}
 		}
@@ -153,13 +171,12 @@ func (as *ActionService) handleLiked(ctx context.Context, emailId, targetEmailId
 		"emailId": &types.AttributeValueMemberS{Value: emailId},
 	}
 	expressionAttributeValuesLiked := map[string]types.AttributeValue{
-		":empty": &types.AttributeValueMemberL{Value: []types.AttributeValue{}}, // An empty list if "liked" does not exist
+		":empty": &types.AttributeValueMemberL{Value: []types.AttributeValue{}},
 		":targetEmailIdList": &types.AttributeValueMemberL{Value: []types.AttributeValue{
-			&types.AttributeValueMemberS{Value: targetEmailId}, // Wrap targetEmailId in a list
+			&types.AttributeValueMemberS{Value: targetEmailId},
 		}},
 	}
 
-	// Update the liked[] list for the emailId profile
 	_, err = as.Dynamo.UpdateItem(ctx, "UserProfiles", updateExpressionLiked, keyLiked, expressionAttributeValuesLiked, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update liked list for emailId profile: %w", err)
@@ -171,13 +188,12 @@ func (as *ActionService) handleLiked(ctx context.Context, emailId, targetEmailId
 		"emailId": &types.AttributeValueMemberS{Value: targetEmailId},
 	}
 	expressionAttributeValuesLikedBy := map[string]types.AttributeValue{
-		":empty": &types.AttributeValueMemberL{Value: []types.AttributeValue{}}, // An empty list if "likedBy" does not exist
+		":empty": &types.AttributeValueMemberL{Value: []types.AttributeValue{}},
 		":emailIdList": &types.AttributeValueMemberL{Value: []types.AttributeValue{
-			&types.AttributeValueMemberS{Value: emailId}, // Wrap emailId in a list
+			&types.AttributeValueMemberS{Value: emailId},
 		}},
 	}
 
-	// Update the likedBy[] list for the targetEmailId profile
 	_, err = as.Dynamo.UpdateItem(ctx, "UserProfiles", updateExpressionLikedBy, keyLikedBy, expressionAttributeValuesLikedBy, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update likedBy list for targetEmailId profile: %w", err)
