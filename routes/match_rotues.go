@@ -16,7 +16,7 @@ func RegisterMatchRoutes(r *mux.Router, matchService *services.MatchService) {
 	matchRouter := r.PathPrefix("/api/match").Subrouter()
 
 	// Define routes and their corresponding handlers
-	matchRouter.HandleFunc("/currentMatches", controller.GetCurrentMatches).Methods("GET")
+	matchRouter.HandleFunc("/connections", controller.GetConnections).Methods("GET")
 	matchRouter.HandleFunc("", controller.GetFilteredProfiles).Methods("GET") // Handles /api/match with query parameters
 	matchRouter.HandleFunc("/newLikes", controller.GetNewLikes).Methods("GET")
 	matchRouter.HandleFunc("/pings", controller.GetPings).Methods("GET")

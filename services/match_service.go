@@ -64,7 +64,7 @@ func (as *MatchService) GetPings(ctx context.Context, emailId string) ([]map[str
 }
 
 // GetCurrentMatches retrieves the matches for a user and enriches them with messages data.
-func (as *MatchService) GetCurrentMatches(ctx context.Context, emailId string) ([]map[string]interface{}, error) {
+func (as *MatchService) GetConnections(ctx context.Context, emailId string) ([]map[string]interface{}, error) {
 	profile, err := as.GetUserProfile(ctx, emailId)
 	if err != nil || profile == nil {
 		return nil, fmt.Errorf("user profile not found for userId: %s", emailId)

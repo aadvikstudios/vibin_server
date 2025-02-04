@@ -74,14 +74,14 @@ func (ac *MatchController) GetPings(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetCurrentMatches handles fetching current matches for a user
-func (ac *MatchController) GetCurrentMatches(w http.ResponseWriter, r *http.Request) {
+func (ac *MatchController) GetConnections(w http.ResponseWriter, r *http.Request) {
 	emailId := r.URL.Query().Get("emailId")
 	if emailId == "" {
 		http.Error(w, "emailId is required", http.StatusBadRequest)
 		return
 	}
 
-	matches, err := ac.MatchService.GetCurrentMatches(context.Background(), emailId)
+	matches, err := ac.MatchService.GetConnections(context.Background(), emailId)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
