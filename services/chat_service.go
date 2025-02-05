@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 )
 
@@ -33,7 +35,7 @@ func (cs *ChatService) SaveMessage(message Message) error {
 	return cs.Dynamo.PutItem(context.TODO(), "Messages", message)
 }
 
-// MarkMessagesAsRead marks all messages as read for a match ID
+// MarkMessagesAsRead marks all messages as read for a match ID// MarkMessagesAsRead marks all messages as read for a match ID
 func (cs *ChatService) MarkMessagesAsRead(matchID string) error {
 	// Fetch messages for the given matchID
 	messages, err := cs.GetMessagesByMatchID(matchID)
@@ -44,33 +46,36 @@ func (cs *ChatService) MarkMessagesAsRead(matchID string) error {
 	// Debug: Log the fetched messages
 	fmt.Printf("[DEBUG] MarkMessagesAsRead: Fetched messages for matchID %s: %+v\n", matchID, messages)
 
-	// Use a batch write to update all messages
-	var writeRequests []types.WriteRequest
+	// Iterate over each message and update only the "isUnread" field
 	for _, message := range messages {
 		// Debug: Log the message being updated
-		fmt.Printf("[DEBUG] MarkMessagesAsRead: Preparing update for messageId %s\n", message.MessageID)
+		fmt.Printf("[DEBUG] MarkMessagesAsRead: Updating messageId %s\n", message.MessageID)
 
-		writeRequests = append(writeRequests, types.WriteRequest{
-			PutRequest: &types.PutRequest{
-				Item: map[string]types.AttributeValue{
-					"matchId":   &types.AttributeValueMemberS{Value: message.MatchID},
-					"createdAt": &types.AttributeValueMemberS{Value: message.CreatedAt}, // Use the sort key
-					"isUnread":  &types.AttributeValueMemberBOOL{Value: false},
-				},
-			},
+		// Prepare the update expression
+		updateExpression := "SET isUnread = :falseValue"
+		key := map[string]types.AttributeValue{
+			"matchId":   &types.AttributeValueMemberS{Value: message.MatchID},   // Partition key
+			"createdAt": &types.AttributeValueMemberS{Value: message.CreatedAt}, // Sort key
+		}
+		expressionAttributeValues := map[string]types.AttributeValue{
+			":falseValue": &types.AttributeValueMemberBOOL{Value: false},
+		}
+
+		// Perform the update
+		_, err := cs.Dynamo.Client.UpdateItem(context.TODO(), &dynamodb.UpdateItemInput{
+			TableName:                 aws.String("Messages"),
+			Key:                       key,
+			UpdateExpression:          aws.String(updateExpression),
+			ExpressionAttributeValues: expressionAttributeValues,
 		})
-
-	}
-
-	// Batch write the updates
-	err = cs.Dynamo.BatchWriteItems(context.TODO(), "Messages", writeRequests)
-	if err != nil {
-		fmt.Printf("[ERROR] MarkMessagesAsRead: Failed to batch write updates: %v\n", err)
-		return fmt.Errorf("failed to batch write updates: %w", err)
+		if err != nil {
+			fmt.Printf("[ERROR] MarkMessagesAsRead: Failed to update messageId %s: %v\n", message.MessageID, err)
+			return fmt.Errorf("failed to update messageId %s: %w", message.MessageID, err)
+		}
 	}
 
 	// Debug: Log success
-	fmt.Printf("[DEBUG] MarkMessagesAsRead: Successfully updated messages for matchID %s\n", matchID)
+	fmt.Printf("[DEBUG] MarkMessagesAsRead: Successfully marked messages as read for matchID %s\n", matchID)
 	return nil
 }
 
