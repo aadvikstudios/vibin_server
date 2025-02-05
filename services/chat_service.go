@@ -44,27 +44,28 @@ func (cs *ChatService) MarkMessagesAsRead(matchID string) error {
 	// Debug: Log the fetched messages
 	fmt.Printf("[DEBUG] MarkMessagesAsRead: Fetched messages for matchID %s: %+v\n", matchID, messages)
 
-	// Iterate over each message and update the isUnread field
+	// Use a batch write to update all messages
+	var writeRequests []types.WriteRequest
 	for _, message := range messages {
 		// Debug: Log the message being updated
-		fmt.Printf("[DEBUG] MarkMessagesAsRead: Updating messageId %s for matchId %s\n", message.MessageID, message.MatchID)
+		fmt.Printf("[DEBUG] MarkMessagesAsRead: Preparing update for messageId %s\n", message.MessageID)
 
-		// Update the isUnread attribute to false
-		updateExpression := "SET isUnread = :falseValue"
-		key := map[string]types.AttributeValue{
-			"matchId":   &types.AttributeValueMemberS{Value: message.MatchID},
-			"messageId": &types.AttributeValueMemberS{Value: message.MessageID},
-		}
-		expressionAttributeValues := map[string]types.AttributeValue{
-			":falseValue": &types.AttributeValueMemberBOOL{Value: false},
-		}
+		writeRequests = append(writeRequests, types.WriteRequest{
+			PutRequest: &types.PutRequest{
+				Item: map[string]types.AttributeValue{
+					"matchId":   &types.AttributeValueMemberS{Value: message.MatchID},
+					"messageId": &types.AttributeValueMemberS{Value: message.MessageID},
+					"isUnread":  &types.AttributeValueMemberBOOL{Value: false},
+				},
+			},
+		})
+	}
 
-		_, err := cs.Dynamo.UpdateItem(context.TODO(), "Messages", updateExpression, key, expressionAttributeValues, nil)
-		if err != nil {
-			// Debug: Log the error for this message
-			fmt.Printf("[ERROR] MarkMessagesAsRead: Failed to update isUnread for messageId %s: %v\n", message.MessageID, err)
-			return fmt.Errorf("failed to update isUnread for messageId %s: %w", message.MessageID, err)
-		}
+	// Batch write the updates
+	err = cs.Dynamo.BatchWriteItems(context.TODO(), "Messages", writeRequests)
+	if err != nil {
+		fmt.Printf("[ERROR] MarkMessagesAsRead: Failed to batch write updates: %v\n", err)
+		return fmt.Errorf("failed to batch write updates: %w", err)
 	}
 
 	// Debug: Log success

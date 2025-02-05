@@ -187,3 +187,35 @@ func stringJoin(parts []string, delimiter string) string {
 	}
 	return result
 }
+
+// BatchWriteItems writes multiple items to DynamoDB in batches
+func (ds *DynamoService) BatchWriteItems(
+	ctx context.Context,
+	tableName string,
+	writeRequests []types.WriteRequest,
+) error {
+	const maxBatchSize = 25
+
+	// Process requests in batches of 25
+	for i := 0; i < len(writeRequests); i += maxBatchSize {
+		end := i + maxBatchSize
+		if end > len(writeRequests) {
+			end = len(writeRequests)
+		}
+
+		// Create batch input
+		batchInput := &dynamodb.BatchWriteItemInput{
+			RequestItems: map[string][]types.WriteRequest{
+				tableName: writeRequests[i:end],
+			},
+		}
+
+		// Execute batch write
+		_, err := ds.Client.BatchWriteItem(ctx, batchInput)
+		if err != nil {
+			return fmt.Errorf("failed to batch write items to table '%s': %w", tableName, err)
+		}
+	}
+
+	return nil
+}
