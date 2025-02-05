@@ -11,7 +11,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.39.6
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.74.1
 	github.com/google/uuid v1.6.0
-	github.com/googollee/go-socket.io v1.7.0
+	github.com/googollee/go-socket.io v1.6.1
 	github.com/gorilla/mux v1.8.1
 	github.com/rs/cors v1.11.1
 )
