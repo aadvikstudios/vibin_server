@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -41,6 +42,13 @@ func main() {
 		fmt.Fprintln(w, "Welcome to Vibin")
 	}).Methods("GET")
 
+	// Register a health check endpoint
+	r.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		response := map[string]string{"status": "healthy"}
+		json.NewEncoder(w).Encode(response)
+	}).Methods("GET")
+
 	// Register routes
 	routes.RegisterUserProfileRoutes(r, userProfileService)
 	routes.RegisterActionRoutes(r, actionService)
@@ -50,7 +58,7 @@ func main() {
 
 	// Add CORS middleware
 	corsHandler := cors.New(cors.Options{
-		AllowedOrigins:   []string{"*"},
+		AllowedOrigins:   []string{"*"}, // Adjust for specific domains if needed
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Content-Type", "Authorization"},
 		AllowCredentials: true,
