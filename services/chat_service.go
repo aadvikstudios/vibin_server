@@ -17,7 +17,7 @@ type Message struct {
 	Content   string `json:"content"`
 	CreatedAt string `json:"createdAt"`
 	Liked     bool   `json:"liked"`
-	Read      bool   `json:"read"`
+	Read      bool   `json:"isUnRead"`
 }
 
 // ChatService handles business logic for chat operations
