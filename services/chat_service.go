@@ -54,11 +54,12 @@ func (cs *ChatService) MarkMessagesAsRead(matchID string) error {
 			PutRequest: &types.PutRequest{
 				Item: map[string]types.AttributeValue{
 					"matchId":   &types.AttributeValueMemberS{Value: message.MatchID},
-					"messageId": &types.AttributeValueMemberS{Value: message.MessageID},
+					"createdAt": &types.AttributeValueMemberS{Value: message.CreatedAt}, // Use the sort key
 					"isUnread":  &types.AttributeValueMemberBOOL{Value: false},
 				},
 			},
 		})
+
 	}
 
 	// Batch write the updates
