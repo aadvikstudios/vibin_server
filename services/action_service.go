@@ -154,7 +154,7 @@ func (as *ActionService) handleLiked(ctx context.Context, emailId, targetEmailId
 
 				// Use CreateMessage to insert a welcome message when a match is created
 				messageContent := "You have matched with " + utils.ExtractString(targetProfile, "name") + "! Say Hi!"
-				err = as.CreateMessage(ctx, matchID, emailId, messageContent, false, true)
+				err = as.CreateMessage(ctx, matchID, "", messageContent, false, true)
 				if err != nil {
 					return nil, fmt.Errorf("failed to add match message: %w", err)
 				}
