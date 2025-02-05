@@ -1,6 +1,6 @@
 module vibin_server
 
-go 1.21
+go 1.22.0
 
 toolchain go1.23.5
 
@@ -10,8 +10,8 @@ require (
 	github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue v1.16.0
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.39.6
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.74.1
+	github.com/erock530/gosf-socketio v0.0.0-20240722073450-a5d02c21def6
 	github.com/google/uuid v1.6.0
-	github.com/googollee/go-socket.io v1.6.1
 	github.com/gorilla/mux v1.8.1
 	github.com/rs/cors v1.11.1
 )
@@ -34,8 +34,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.28.11 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.33.10 // indirect
 	github.com/aws/smithy-go v1.22.2 // indirect
-	github.com/gofrs/uuid v4.0.0+incompatible // indirect
-	github.com/gomodule/redigo v1.8.4 // indirect
-	github.com/gorilla/websocket v1.4.2 // indirect
+	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 )

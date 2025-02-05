@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -50,12 +51,15 @@ func main() {
 	// Initialize Socket.IO server
 	log.Println("Initializing Socket.IO server...")
 	socketServer := socket.NewSocketServer()
-	go socketServer.Serve()
-	defer socketServer.Close()
 
 	// Initialize the router
 	log.Println("Initializing router...")
 	r := mux.NewRouter()
+
+	// Register a welcome route
+	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, "Welcome to Vibin")
+	}).Methods("GET")
 
 	// Register routes
 	log.Println("Registering routes...")
@@ -75,11 +79,11 @@ func main() {
 		AllowCredentials: true,
 	}).Handler(r)
 
-	// Combine Gorilla Mux and Socket.IO
+	// Attach Socket.IO server to the HTTP server
 	http.Handle("/socket.io/", socketServer)
 	http.Handle("/", corsHandler)
 
-	// Start the server
+	// Start the main HTTP server
 	log.Printf("Starting server on port %s...\n", port)
 	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
