@@ -49,6 +49,16 @@ func (ds *DynamoService) QueryItems(
 	return output.Items, nil
 }
 
+func (d *DynamoService) QueryItemsWithQueryInput(ctx context.Context, input *dynamodb.QueryInput) ([]map[string]types.AttributeValue, error) {
+	// Execute DynamoDB Query
+	result, err := d.Client.Query(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query DynamoDB: %w", err)
+	}
+
+	return result.Items, nil
+}
+
 func (ds *DynamoService) PutItem(ctx context.Context, tableName string, item interface{}) error {
 	log.Printf("Marshalling item for table '%s'...\n", tableName)
 	marshaledItem, err := attributevalue.MarshalMap(item)

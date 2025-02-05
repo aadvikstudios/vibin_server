@@ -5,6 +5,7 @@ go 1.22.0
 toolchain go1.23.5
 
 require (
+	github.com/aws/aws-sdk-go v1.55.6
 	github.com/aws/aws-sdk-go-v2 v1.34.0
 	github.com/aws/aws-sdk-go-v2/config v1.29.2
 	github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue v1.16.0

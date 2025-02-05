@@ -6,7 +6,9 @@ import (
 	"vibin_server/models"
 	"vibin_server/utils"
 
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	"github.com/aws/aws-sdk-go/aws"
 )
 
 type MatchService struct {
@@ -216,14 +218,23 @@ func (as *MatchService) GetLastMessage(ctx context.Context, matchID, emailId str
 		":matchId": &types.AttributeValueMemberS{Value: matchID},
 	}
 
-	// Query the Messages table sorted by timestamp
-	messages, err := as.Dynamo.QueryItems(ctx, "Messages", filterExpression, expressionAttributeValues, nil, 1)
-	if err != nil || len(messages) == 0 {
+	// Add ScanIndexForward: false to ensure the query is sorted by timestamp descending
+	queryInput := &dynamodb.QueryInput{
+		TableName:                 aws.String("Messages"),
+		KeyConditionExpression:    aws.String(filterExpression),
+		ExpressionAttributeValues: expressionAttributeValues,
+		ScanIndexForward:          aws.Bool(false), // Descending order
+		Limit:                     aws.Int32(1),    // Only get the latest message
+	}
+
+	// Execute the query
+	queryOutput, err := as.Dynamo.QueryItemsWithQueryInput(ctx, queryInput)
+	if err != nil || len(queryOutput) == 0 {
 		return "", false, "" // No messages found
 	}
 
-	// Extract last message details
-	messageItem := messages[0]
+	// Extract the latest message details
+	messageItem := queryOutput[0]
 	lastMessage := utils.ExtractString(messageItem, "content")
 	senderId := utils.ExtractString(messageItem, "senderId")
 	isUnread := utils.ExtractBool(messageItem, "isUnread") && senderId != emailId // Only unread if sender is not the user
