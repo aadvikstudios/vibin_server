@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"vibin_server/services"
 )
@@ -34,22 +35,30 @@ func (cc *ChatController) CreateMessage(w http.ResponseWriter, r *http.Request) 
 	json.NewEncoder(w).Encode(map[string]string{"message": "Message saved successfully"})
 }
 
-// GetMessagesByMatchID handles fetching messages by match ID
+// GetMessagesByMatchID retrieves messages for a specific match ID
 func (cc *ChatController) GetMessagesByMatchID(w http.ResponseWriter, r *http.Request) {
 	matchID := r.URL.Query().Get("matchId")
 	if matchID == "" {
+		log.Println("[DEBUG] GetMessagesByMatchID: matchId is missing in the request")
 		http.Error(w, "matchId is required", http.StatusBadRequest)
 		return
 	}
+	log.Printf("[DEBUG] GetMessagesByMatchID: Received request for matchId: %s\n", matchID)
 
 	messages, err := cc.ChatService.GetMessagesByMatchID(matchID)
 	if err != nil {
+		log.Printf("[ERROR] GetMessagesByMatchID: Failed to fetch messages for matchId %s: %v\n", matchID, err)
 		http.Error(w, "Failed to fetch messages", http.StatusInternalServerError)
 		return
 	}
 
+	log.Printf("[DEBUG] GetMessagesByMatchID: Successfully fetched messages: %+v\n", messages)
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(messages)
+	if err := json.NewEncoder(w).Encode(messages); err != nil {
+		log.Printf("[ERROR] GetMessagesByMatchID: Failed to encode response: %v\n", err)
+		http.Error(w, "Failed to send response", http.StatusInternalServerError)
+		return
+	}
 }
 
 // MarkMessagesAsRead handles marking messages as read
@@ -58,18 +67,32 @@ func (cc *ChatController) MarkMessagesAsRead(w http.ResponseWriter, r *http.Requ
 		MatchID string `json:"matchId"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		log.Printf("[DEBUG] MarkMessagesAsRead: Invalid request payload: %v\n", err)
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+		return
+	}
+	log.Printf("[DEBUG] MarkMessagesAsRead: Received request to mark messages as read for matchId: %s\n", request.MatchID)
+
+	if request.MatchID == "" {
+		log.Println("[DEBUG] MarkMessagesAsRead: matchId is missing in the request payload")
+		http.Error(w, "matchId is required", http.StatusBadRequest)
 		return
 	}
 
 	err := cc.ChatService.MarkMessagesAsRead(request.MatchID)
 	if err != nil {
+		log.Printf("[ERROR] MarkMessagesAsRead: Failed to mark messages as read for matchId %s: %v\n", request.MatchID, err)
 		http.Error(w, "Failed to mark messages as read", http.StatusInternalServerError)
 		return
 	}
 
+	log.Printf("[DEBUG] MarkMessagesAsRead: Successfully marked messages as read for matchId: %s\n", request.MatchID)
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"message": "Messages marked as read"})
+	if err := json.NewEncoder(w).Encode(map[string]string{"message": "Messages marked as read"}); err != nil {
+		log.Printf("[ERROR] MarkMessagesAsRead: Failed to encode response: %v\n", err)
+		http.Error(w, "Failed to send response", http.StatusInternalServerError)
+		return
+	}
 }
 
 // LikeMessage handles liking a message
