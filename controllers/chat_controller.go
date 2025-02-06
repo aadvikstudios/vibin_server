@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"vibin_server/services"
@@ -17,25 +18,30 @@ func NewChatController(chatService *services.ChatService) *ChatController {
 	return &ChatController{ChatService: chatService}
 }
 
-// CreateMessage handles adding a new message
 // CreateMessage handles adding a new message with text and/or an image
 func (cc *ChatController) CreateMessage(w http.ResponseWriter, r *http.Request) {
 	var message services.Message
 
 	// Decode JSON request body
 	if err := json.NewDecoder(r.Body).Decode(&message); err != nil {
+		fmt.Printf("[ERROR] CreateMessage: Invalid request payload: %v\n", err)
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
 		return
 	}
 
+	// Debug: Log the received message
+	fmt.Printf("[DEBUG] CreateMessage: Received request: %+v\n", message)
+
 	// Validate required fields
 	if message.MatchID == "" || message.SenderID == "" {
+		fmt.Println("[ERROR] CreateMessage: Missing required fields")
 		http.Error(w, "Missing required fields: matchId and senderId", http.StatusBadRequest)
 		return
 	}
 
 	// Ensure at least one of content or imageUrl is provided
 	if message.Content == "" && message.ImageURL == "" {
+		fmt.Println("[ERROR] CreateMessage: Either content or imageUrl must be provided")
 		http.Error(w, "Either content or imageUrl must be provided", http.StatusBadRequest)
 		return
 	}
@@ -43,6 +49,7 @@ func (cc *ChatController) CreateMessage(w http.ResponseWriter, r *http.Request) 
 	// Save message to database
 	err := cc.ChatService.SaveMessage(message)
 	if err != nil {
+		fmt.Printf("[ERROR] CreateMessage: Failed to save message: %v\n", err)
 		http.Error(w, "Failed to save message", http.StatusInternalServerError)
 		return
 	}

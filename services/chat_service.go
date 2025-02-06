@@ -30,6 +30,9 @@ type ChatService struct {
 
 // SaveMessage saves a new message in the database
 func (cs *ChatService) SaveMessage(message Message) error {
+	// Debug: Log the received message before saving
+	fmt.Printf("[DEBUG] SaveMessage: Received message: %+v\n", message)
+
 	// Ensure matchId and senderId are provided
 	if message.MatchID == "" || message.SenderID == "" {
 		return errors.New("missing required fields: matchId or senderId")
@@ -40,8 +43,28 @@ func (cs *ChatService) SaveMessage(message Message) error {
 		return errors.New("either content or imageUrl must be provided")
 	}
 
-	// Save message to DynamoDB
-	return cs.Dynamo.PutItem(context.TODO(), "Messages", message)
+	// Marshal the message to DynamoDB format
+	item, err := attributevalue.MarshalMap(message)
+	if err != nil {
+		fmt.Printf("[ERROR] SaveMessage: Failed to marshal message: %v\n", err)
+		return fmt.Errorf("failed to marshal message: %w", err)
+	}
+
+	// Debug: Log the marshaled DynamoDB item
+	fmt.Printf("[DEBUG] SaveMessage: Marshaled item: %+v\n", item)
+
+	// Save the item to DynamoDB
+	_, err = cs.Dynamo.Client.PutItem(context.TODO(), &dynamodb.PutItemInput{
+		TableName: aws.String("Messages"),
+		Item:      item,
+	})
+	if err != nil {
+		fmt.Printf("[ERROR] SaveMessage: Failed to insert message: %v\n", err)
+		return fmt.Errorf("failed to insert message in DynamoDB: %w", err)
+	}
+
+	fmt.Println("[SUCCESS] SaveMessage: Message successfully saved.")
+	return nil
 }
 
 // MarkMessagesAsRead marks all messages as read for a match ID// MarkMessagesAsRead marks all messages as read for a match ID
