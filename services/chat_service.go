@@ -13,14 +13,14 @@ import (
 
 // Message structure for chat messages
 type Message struct {
-	MessageID string `json:"messageId"`
-	MatchID   string `json:"matchId"`
-	SenderID  string `json:"senderId"`
-	Content   string `json:"content"`
-	ImageURL  string `json:"imageUrl"`
-	CreatedAt string `json:"createdAt"`
-	Liked     bool   `json:"liked"`
-	Read      bool   `json:"isUnRead"`
+	MessageID string `json:"messageId" dynamodbav:"messageId"`
+	MatchID   string `json:"matchId" dynamodbav:"matchId"`
+	SenderID  string `json:"senderId" dynamodbav:"senderId"`
+	Content   string `json:"content" dynamodbav:"content"`
+	ImageURL  string `json:"imageUrl" dynamodbav:"imageUrl"`
+	CreatedAt string `json:"createdAt" dynamodbav:"createdAt"`
+	Liked     bool   `json:"liked" dynamodbav:"liked"`
+	Read      bool   `json:"isUnRead" dynamodbav:"isUnRead"`
 }
 
 // ChatService handles business logic for chat operations
@@ -32,6 +32,7 @@ type ChatService struct {
 func (cs *ChatService) SaveMessage(message Message) error {
 	// Debug: Log the received message before saving
 	fmt.Printf("[DEBUG] SaveMessage: Received message: %+v\n", message)
+	fmt.Printf("[DEBUG] SaveMessage: Checking matchId before marshaling: %+v\n", message.MatchID)
 
 	// Ensure matchId and senderId are provided
 	if message.MatchID == "" || message.SenderID == "" {
