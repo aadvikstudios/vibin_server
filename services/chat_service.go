@@ -17,7 +17,7 @@ type Message struct {
 	MatchID   string `json:"matchId"`
 	SenderID  string `json:"senderId"`
 	Content   string `json:"content"`
-	ImageURL  string `json:"imageURL"`
+	ImageURL  string `json:"imageUrl"`
 	CreatedAt string `json:"createdAt"`
 	Liked     bool   `json:"liked"`
 	Read      bool   `json:"isUnRead"`
