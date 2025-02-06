@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"time"
 
@@ -21,8 +22,8 @@ func init() {
 }
 
 // GenerateUploadURL generates a presigned URL for uploading a file
-func GenerateUploadURL(fileName, fileType string) (string, string, error) {
-	key := "profile-pics/" + time.Now().Format("20060102150405") + "-" + fileName
+func GenerateUploadURL(fileName, fileType, path string) (string, string, error) {
+	key := fmt.Sprintf("%s%s", path, fileName) // Append path to file
 	params := &s3.PutObjectInput{
 		Bucket:      aws.String(os.Getenv("S3_BUCKET_NAME")),
 		Key:         aws.String(key),

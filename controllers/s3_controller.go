@@ -14,6 +14,7 @@ func GeneratePresignedURL(w http.ResponseWriter, r *http.Request) {
 	var payload struct {
 		FileName string `json:"fileName"`
 		FileType string `json:"fileType"`
+		Path     string `json:"path"` // Accept path parameter
 	}
 
 	// Decode JSON payload
@@ -24,15 +25,15 @@ func GeneratePresignedURL(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate required fields
-	if payload.FileName == "" || payload.FileType == "" {
+	if payload.FileName == "" || payload.FileType == "" || payload.Path == "" {
 		log.Println("Error: Missing required fields in request payload")
 		http.Error(w, "Missing required fields", http.StatusBadRequest)
 		return
 	}
 
-	log.Printf("GeneratePresignedURL: Generating pre-signed URL for FileName: %s, FileType: %s", payload.FileName, payload.FileType)
+	log.Printf("GeneratePresignedURL: Generating pre-signed URL for FileName: %s, Path: %s", payload.FileName, payload.Path)
 
-	url, fileName, err := services.GenerateUploadURL(payload.FileName, payload.FileType)
+	url, fileName, err := services.GenerateUploadURL(payload.FileName, payload.FileType, payload.Path)
 	if err != nil {
 		log.Printf("Error generating pre-signed URL: %v", err)
 		http.Error(w, "Failed to generate pre-signed URL", http.StatusInternalServerError)
