@@ -23,17 +23,22 @@ func init() {
 
 // GenerateUploadURL generates a presigned URL for uploading a file
 func GenerateUploadURL(fileName, fileType, path string) (string, string, error) {
-	key := fmt.Sprintf("%s%s", path, fileName) // Append path to file
+	// ✅ Ensure `path` is added only once
+	key := fmt.Sprintf("%s%s", path, fileName)
+
 	params := &s3.PutObjectInput{
 		Bucket:      aws.String(os.Getenv("S3_BUCKET_NAME")),
 		Key:         aws.String(key),
 		ContentType: aws.String(fileType),
 	}
+
 	presigner := s3.NewPresignClient(s3Client)
 	presignedURL, err := presigner.PresignPutObject(context.TODO(), params, s3.WithPresignExpires(5*time.Minute))
+
 	if err != nil {
 		return "", "", err
 	}
+
 	return presignedURL.URL, key, nil
 }
 
