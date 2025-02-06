@@ -18,21 +18,41 @@ func NewChatController(chatService *services.ChatService) *ChatController {
 }
 
 // CreateMessage handles adding a new message
+// CreateMessage handles adding a new message with text and/or an image
 func (cc *ChatController) CreateMessage(w http.ResponseWriter, r *http.Request) {
 	var message services.Message
+
+	// Decode JSON request body
 	if err := json.NewDecoder(r.Body).Decode(&message); err != nil {
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
 		return
 	}
 
+	// Validate required fields
+	if message.MatchID == "" || message.SenderID == "" {
+		http.Error(w, "Missing required fields: matchId and senderId", http.StatusBadRequest)
+		return
+	}
+
+	// Ensure at least one of content or imageUrl is provided
+	if message.Content == "" && message.ImageURL == "" {
+		http.Error(w, "Either content or imageUrl must be provided", http.StatusBadRequest)
+		return
+	}
+
+	// Save message to database
 	err := cc.ChatService.SaveMessage(message)
 	if err != nil {
 		http.Error(w, "Failed to save message", http.StatusInternalServerError)
 		return
 	}
 
+	// Respond with success
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(map[string]string{"message": "Message saved successfully"})
+	json.NewEncoder(w).Encode(map[string]string{
+		"message":   "Message saved successfully",
+		"messageId": message.MessageID,
+	})
 }
 
 // GetMessagesByMatchID retrieves messages for a specific match ID

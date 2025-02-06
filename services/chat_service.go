@@ -17,6 +17,7 @@ type Message struct {
 	MatchID   string `json:"matchId"`
 	SenderID  string `json:"senderId"`
 	Content   string `json:"content"`
+	ImageURL  string `json:"imageURL"`
 	CreatedAt string `json:"createdAt"`
 	Liked     bool   `json:"liked"`
 	Read      bool   `json:"isUnRead"`
@@ -27,11 +28,19 @@ type ChatService struct {
 	Dynamo *DynamoService
 }
 
-// SaveMessage saves a new message
+// SaveMessage saves a new message in the database
 func (cs *ChatService) SaveMessage(message Message) error {
-	if message.MatchID == "" || message.Content == "" {
-		return errors.New("missing required fields")
+	// Ensure matchId and senderId are provided
+	if message.MatchID == "" || message.SenderID == "" {
+		return errors.New("missing required fields: matchId or senderId")
 	}
+
+	// Ensure at least one of content or imageUrl is provided
+	if message.Content == "" && message.ImageURL == "" {
+		return errors.New("either content or imageUrl must be provided")
+	}
+
+	// Save message to DynamoDB
 	return cs.Dynamo.PutItem(context.TODO(), "Messages", message)
 }
 
