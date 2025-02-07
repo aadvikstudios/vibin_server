@@ -21,6 +21,7 @@ type Message struct {
 	CreatedAt string `json:"createdAt" dynamodbav:"createdAt"`
 	Liked     bool   `json:"liked" dynamodbav:"liked"`
 	Read      bool   `json:"isUnRead" dynamodbav:"isUnRead"`
+	Status    string `json:"status" dynamodbav:"status"`
 }
 
 // ChatService handles business logic for chat operations
