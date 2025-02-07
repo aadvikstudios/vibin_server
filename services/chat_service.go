@@ -12,16 +12,22 @@ import (
 )
 
 // Message structure for chat messages
-type Message struct {
-	MessageID string `json:"messageId" dynamodbav:"messageId"`
-	MatchID   string `json:"matchId" dynamodbav:"matchId"`
-	SenderID  string `json:"senderId" dynamodbav:"senderId"`
+type ReplyTo struct {
 	Content   string `json:"content" dynamodbav:"content"`
-	ImageURL  string `json:"imageUrl" dynamodbav:"imageUrl"`
-	CreatedAt string `json:"createdAt" dynamodbav:"createdAt"`
-	Liked     bool   `json:"liked" dynamodbav:"liked"`
-	Read      bool   `json:"isUnRead" dynamodbav:"isUnRead"`
-	Status    string `json:"status" dynamodbav:"status"`
+	MessageID string `json:"messageId" dynamodbav:"messageId"`
+}
+
+type Message struct {
+	MessageID string   `json:"messageId" dynamodbav:"messageId"`
+	MatchID   string   `json:"matchId" dynamodbav:"matchId"`
+	SenderID  string   `json:"senderId" dynamodbav:"senderId"`
+	Content   string   `json:"content" dynamodbav:"content"`
+	ImageURL  string   `json:"imageUrl" dynamodbav:"imageUrl"`
+	CreatedAt string   `json:"createdAt" dynamodbav:"createdAt"`
+	Liked     bool     `json:"liked" dynamodbav:"liked"`
+	Read      bool     `json:"isUnRead" dynamodbav:"isUnRead"`
+	Status    string   `json:"status" dynamodbav:"status"`
+	ReplyTo   *ReplyTo `json:"replyTo,omitempty" dynamodbav:"replyTo,omitempty"` // Use a pointer to handle nil cases
 }
 
 // ChatService handles business logic for chat operations

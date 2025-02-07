@@ -6,7 +6,6 @@ type UserProfile struct {
 	EmailIDVerified     bool     `dynamodbav:"emailIdVerified,omitempty" json:"emailIdVerified,omitempty"`         // Email verification status
 	PhoneNumber         string   `dynamodbav:"phoneNumber,omitempty" json:"phoneNumber,omitempty"`                 // User's phone number
 	Name                string   `dynamodbav:"name,omitempty" json:"name,omitempty"`                               // Full name of the user
-	UserID              string   `dynamodbav:"userId,omitempty" json:"userId,omitempty"`                           // Optional unique user ID
 	Bio                 string   `dynamodbav:"bio,omitempty" json:"bio,omitempty"`                                 // Short biography
 	Desires             []string `dynamodbav:"desires,omitempty" json:"desires,omitempty"`                         // User's desires
 	DOB                 string   `dynamodbav:"dob,omitempty" json:"dob,omitempty"`                                 // Date of Birth

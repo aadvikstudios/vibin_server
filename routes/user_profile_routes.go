@@ -17,8 +17,8 @@ func RegisterUserProfileRoutes(r *mux.Router, userProfileService *services.UserP
 
 	// Define routes and their corresponding handlers
 	profileRouter.HandleFunc("", controller.CreateUserProfile).Methods("POST")
-	profileRouter.HandleFunc("/{userId}", controller.UpdateUserProfile).Methods("PATCH")
-	profileRouter.HandleFunc("/{userId}", controller.GetUserProfileByID).Methods("GET")
+	// profileRouter.HandleFunc("/{userId}", controller.UpdateUserProfile).Methods("PATCH")
+	// profileRouter.HandleFunc("/{userId}", controller.GetUserProfileByID).Methods("GET")
 	profileRouter.HandleFunc("/email/{emailId}", controller.GetUserProfileByEmail).Methods("GET")
-	profileRouter.HandleFunc("/{userId}", controller.DeleteUserProfile).Methods("DELETE")
+	// profileRouter.HandleFunc("/{userId}", controller.DeleteUserProfile).Methods("DELETE")
 }

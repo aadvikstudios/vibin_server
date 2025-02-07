@@ -89,7 +89,7 @@ func (ac *ActionController) HandleAction(w http.ResponseWriter, r *http.Request)
 
 	if request.EmailId == "" || request.TargetEmailId == "" || request.Action == "" {
 		log.Println("Missing required fields in /action request")
-		http.Error(w, "userId, targetUserId, and action are required", http.StatusBadRequest)
+		http.Error(w, "EmailId, TargetEmailId, and action are required", http.StatusBadRequest)
 		return
 	}
 
