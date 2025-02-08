@@ -3,6 +3,8 @@ package services
 import (
 	"context"
 	"fmt"
+	"math"
+	"strconv"
 	"vibin_server/models"
 	"vibin_server/utils"
 
@@ -13,6 +15,26 @@ import (
 
 type MatchService struct {
 	Dynamo *DynamoService
+}
+
+// Haversine formula to calculate distance between two coordinates in km
+func calculateDistance(lat1, lon1, lat2, lon2 float64) float64 {
+	const R = 6371 // Earth's radius in km
+	lat1Rad := lat1 * (math.Pi / 180)
+	lon1Rad := lon1 * (math.Pi / 180)
+	lat2Rad := lat2 * (math.Pi / 180)
+	lon2Rad := lon2 * (math.Pi / 180)
+
+	deltaLat := lat2Rad - lat1Rad
+	deltaLon := lon2Rad - lon1Rad
+
+	a := math.Sin(deltaLat/2)*math.Sin(deltaLat/2) +
+		math.Cos(lat1Rad)*math.Cos(lat2Rad)*
+			math.Sin(deltaLon/2)*math.Sin(deltaLon/2)
+
+	c := 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
+
+	return R * c
 }
 
 // GetUserProfile retrieves a user profile by ID
@@ -150,31 +172,32 @@ func (as *MatchService) GetFilteredProfiles(
 	emailId, gender string,
 	additionalFilters map[string]string,
 ) ([]models.UserProfile, error) {
-	// Fetch the user's profile to get liked, notLiked, and matches
+	// Fetch the user's profile to get latitude and longitude
 	userProfile, err := as.GetUserProfile(ctx, emailId)
 	if err != nil || userProfile == nil {
 		return nil, fmt.Errorf("failed to fetch user profile for emailId: %s", emailId)
 	}
 
-	// Prepare exclusion filters
-	excludeEmails := map[string]struct{}{}
-	excludeEmails[emailId] = struct{}{} // Exclude the user themselves
+	// Extract user location
+	userLat := userProfile["latitude"].(*types.AttributeValueMemberN).Value
+	userLon := userProfile["longitude"].(*types.AttributeValueMemberN).Value
+	currentLat := parseFloat(userLat)
+	currentLon := parseFloat(userLon)
 
-	// Add liked[] to exclusion
+	// Prepare exclusion filters
+	excludeEmails := map[string]struct{}{emailId: {}}
+
+	// Add liked, notLiked, and matches[] to exclusion
 	if likedAttr, ok := userProfile["liked"]; ok {
 		for _, liked := range likedAttr.(*types.AttributeValueMemberL).Value {
 			excludeEmails[liked.(*types.AttributeValueMemberS).Value] = struct{}{}
 		}
 	}
-
-	// Add notLiked[] to exclusion
 	if notLikedAttr, ok := userProfile["notLiked"]; ok {
 		for _, notLiked := range notLikedAttr.(*types.AttributeValueMemberL).Value {
 			excludeEmails[notLiked.(*types.AttributeValueMemberS).Value] = struct{}{}
 		}
 	}
-
-	// Add matches[] to exclusion
 	if matchesAttr, ok := userProfile["matches"]; ok {
 		for _, match := range matchesAttr.(*types.AttributeValueMemberL).Value {
 			matchData := match.(*types.AttributeValueMemberM).Value
@@ -184,30 +207,49 @@ func (as *MatchService) GetFilteredProfiles(
 	}
 
 	// Build filters for DynamoDB scan
-	excludeFields := map[string]string{
-		"gender": gender, // Exclude same gender
-	}
-
-	// Merge additional filters
+	excludeFields := map[string]string{"gender": gender}
 	for key, value := range additionalFilters {
 		excludeFields[key] = value
 	}
 
-	// Use DynamoService to scan profiles with filters
+	// Use DynamoDB scan with filters
 	var profiles []models.UserProfile
 	err = as.Dynamo.ScanWithFilter(ctx, models.UserProfilesTable, func(profile map[string]types.AttributeValue) bool {
-		// Exclude profiles based on emailId
-		emailId := profile["emailId"].(*types.AttributeValueMemberS).Value
-		if _, excluded := excludeEmails[emailId]; excluded {
+		email := profile["emailId"].(*types.AttributeValueMemberS).Value
+		if _, excluded := excludeEmails[email]; excluded {
 			return false
 		}
 		return true
 	}, excludeFields, &profiles)
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch filtered profiles: %w", err)
 	}
 
+	// Compute distances and attach to each profile
+	for i := range profiles {
+		profile := &profiles[i]
+
+		// Extract lat/lon from profile
+		profileLat := profile.Latitude
+		profileLon := profile.Longitude
+
+		// Calculate distance
+		distance := calculateDistance(currentLat, currentLon, profileLat, profileLon)
+		profile.DistanceBetween = distance // Add distance field
+	}
+
+	// Return filtered and sorted profiles
 	return profiles, nil
+}
+
+// Helper function to parse float values safely
+func parseFloat(value string) float64 {
+	val, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return 0.0
+	}
+	return val
 }
 
 // GetLastMessage fetches the latest message for a match
