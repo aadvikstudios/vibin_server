@@ -8,7 +8,6 @@ import (
 	"vibin_server/models"
 	"vibin_server/services"
 
-	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 )
 
@@ -35,11 +34,7 @@ func (c *UserProfileController) CreateUserProfile(w http.ResponseWriter, r *http
 	}
 	log.Printf("Request payload before generating userId: %+v\n", profile)
 
-	// Generate a new UUID for userId
-	profile.UserID = uuid.New().String()
-	log.Printf("Generated userId: %s\n", profile.UserID)
-
-	// Call the service to add the user profile
+	// Call the service to add the user profileu
 	createdProfile, err := c.UserProfileService.AddUserProfile(context.TODO(), profile)
 	if err != nil {
 		log.Printf("Failed to add profile: %v\n", err)

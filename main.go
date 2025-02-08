@@ -56,6 +56,8 @@ func main() {
 	routes.RegisterMatchRoutes(r, matchService)
 	routes.RegisterS3Routes(r)
 
+	r.HandleFunc("/privacy-policy", routes.PrivacyPolicyHandler).Methods("GET")
+
 	// Add CORS middleware
 	corsHandler := cors.New(cors.Options{
 		AllowedOrigins:   []string{"*"}, // Adjust for specific domains if needed
