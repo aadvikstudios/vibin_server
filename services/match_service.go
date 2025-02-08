@@ -236,7 +236,7 @@ func (as *MatchService) GetFilteredProfiles(
 
 		// Calculate distance
 		distance := calculateDistance(currentLat, currentLon, profileLat, profileLon)
-		profile.DistanceBetween = distance // Add distance field
+		profile.DistanceBetween = math.Round(distance*100) / 100
 	}
 
 	// Return filtered and sorted profiles
