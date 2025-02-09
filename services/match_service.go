@@ -225,6 +225,7 @@ func (as *MatchService) GetFilteredProfiles(
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch filtered profiles: %w", err)
 	}
+	fmt.Printf("✅ Fetched profiles length before iterating %d", len(profiles))
 
 	// Compute distances and attach to each profile
 	for i := range profiles {
@@ -234,9 +235,18 @@ func (as *MatchService) GetFilteredProfiles(
 		profileLat := profile.Latitude
 		profileLon := profile.Longitude
 
+		// Ensure profile has valid lat/lon before calculating distance
+		if profileLat == 0 || profileLon == 0 {
+			fmt.Printf("⚠️ Skipping distance calculation for profile %d: Missing lat/lon\n", i)
+			continue
+		}
+
 		// Calculate distance
 		distance := calculateDistance(currentLat, currentLon, profileLat, profileLon)
 		profile.DistanceBetween = math.Round(distance*100) / 100
+
+		// Debug log for distance
+		fmt.Printf("✅ Distance calculated for profile %d (%s): %f km\n", i, profile.EmailID, profile.DistanceBetween)
 	}
 
 	// Return filtered and sorted profiles
