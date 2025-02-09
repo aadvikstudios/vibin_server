@@ -227,6 +227,7 @@ func (as *MatchService) GetFilteredProfiles(
 	}
 	fmt.Printf("✅ Fetched profiles length before iterating %d", len(profiles))
 	// Compute distances and attach to each profile
+	// Compute distances and attach to each profile
 	for i := range profiles {
 		profile := &profiles[i]
 
@@ -246,12 +247,14 @@ func (as *MatchService) GetFilteredProfiles(
 
 		// Ensure zero distances are not omitted
 		if profile.DistanceBetween == 0 {
-			profile.DistanceBetween = 0.00
+			profile.DistanceBetween = 0.00 // Explicitly set 0.00
 		}
 
 		// Debug log for distance
 		fmt.Printf("✅ Distance calculated for profile %d (%s): %f km\n", i, profile.EmailID, profile.DistanceBetween)
 	}
+	fmt.Printf("📌 Final profile list before returning: %+v\n", profiles)
+
 	// Return filtered and sorted profiles
 	return profiles, nil
 }
