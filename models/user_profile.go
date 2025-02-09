@@ -18,7 +18,7 @@ type UserProfile struct {
 	Orientation         string   `dynamodbav:"orientation,omitempty" json:"orientation,omitempty"`                 // User's orientation
 	ShowGenderOnProfile bool     `dynamodbav:"showGenderOnProfile,omitempty" json:"showGenderOnProfile,omitempty"` // Show gender on profile or not
 	Photos              []string `dynamodbav:"photos,omitempty" json:"photos,omitempty"`
-	DistanceBetween     float64  `json:"distanceBetween,omitempty"`
+	DistanceBetween     float64  `json:"distanceBetween"`
 }
 
 // UserProfilesTable is the DynamoDB table name for user profiles
