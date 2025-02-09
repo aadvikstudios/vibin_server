@@ -244,11 +244,6 @@ func (as *MatchService) GetFilteredProfiles(
 		distance := calculateDistance(currentLat, currentLon, profileLat, profileLon)
 		profile.DistanceBetween = math.Round(distance*100) / 100
 
-		// Ensure zero distances are not omitted
-		if profile.DistanceBetween == 0 {
-			profile.DistanceBetween = 0.1 // Explicitly set 0.00
-		}
-
 		// Debug log for distance
 		fmt.Printf("✅ Distance calculated for profile %d (%s): %f km\n", i, profile.EmailID, profile.DistanceBetween)
 	}
