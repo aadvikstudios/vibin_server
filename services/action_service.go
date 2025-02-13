@@ -282,7 +282,7 @@ func (as *ActionService) RemoveFromList(ctx context.Context, userProfileEmail, a
 		return fmt.Errorf("email '%s' not found in list '%s'", emailIdToRemove, attribute)
 	}
 
-	// Construct REMOVE expression
+	// Check if `ExpressionAttributeValues` is empty before passing to DynamoDB
 	updateExpression := fmt.Sprintf("REMOVE %s[%d]", attribute, itemIndex)
 
 	_, err = as.Dynamo.UpdateItem(ctx, "UserProfiles", updateExpression,
