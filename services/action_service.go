@@ -311,7 +311,7 @@ func (as *ActionService) CreateMessage(ctx context.Context, matchID, senderID, c
 }
 
 func (as *ActionService) removePing(ctx context.Context, emailId, senderEmailId string) error {
-	// Retrieve the user profile of the current user (who received the ping)
+	// Retrieve the user profile
 	profile, err := as.GetUserProfile(ctx, emailId)
 	if err != nil {
 		return fmt.Errorf("failed to fetch user profile: %w", err)
@@ -333,7 +333,7 @@ func (as *ActionService) removePing(ctx context.Context, emailId, senderEmailId 
 			updatedPings = append(updatedPings, ping)
 		}
 
-		// If no ping was removed, return early (no need to update)
+		// If no ping was removed, return early
 		if !pingRemoved {
 			return nil
 		}
@@ -351,7 +351,7 @@ func (as *ActionService) removePing(ctx context.Context, emailId, senderEmailId 
 			updateExpression = "REMOVE pings"
 		}
 
-		// Update the user profile in DynamoDB (on current user's profile)
+		// Update the user profile in DynamoDB
 		_, err = as.Dynamo.UpdateItem(ctx, "UserProfiles", updateExpression, map[string]types.AttributeValue{
 			"emailId": &types.AttributeValueMemberS{Value: emailId},
 		}, expressionAttributeValues, nil)

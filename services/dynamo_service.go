@@ -106,16 +106,41 @@ func (ds *DynamoService) UpdateItem(
 	expressionAttributeValues map[string]types.AttributeValue,
 	expressionAttributeNames map[string]string,
 ) (map[string]types.AttributeValue, error) {
-	output, err := ds.Client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+	// Ensure key is not empty
+	if len(key) == 0 {
+		return nil, errors.New("update failed: key cannot be empty")
+	}
+
+	// Ensure updateExpression is not empty
+	if updateExpression == "" {
+		return nil, errors.New("update failed: updateExpression cannot be empty")
+	}
+
+	// Ensure expressionAttributeValues are not empty if needed
+	if len(expressionAttributeValues) == 0 {
+		return nil, errors.New("update failed: expressionAttributeValues cannot be empty")
+	}
+
+	// Construct the update input
+	updateInput := &dynamodb.UpdateItemInput{
 		TableName:                 &tableName,
 		Key:                       key,
 		UpdateExpression:          &updateExpression,
 		ExpressionAttributeValues: expressionAttributeValues,
 		ExpressionAttributeNames:  expressionAttributeNames,
 		ReturnValues:              types.ReturnValueAllNew,
-	})
+	}
+
+	// Execute the update operation
+	output, err := ds.Client.UpdateItem(ctx, updateInput)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update item in table '%s': %w", tableName, err)
+	}
+
+	// Check if attributes are returned
+	if output.Attributes == nil {
+		log.Printf("Update executed, but no attributes were returned for table '%s'", tableName)
+		return nil, nil
 	}
 
 	return output.Attributes, nil
