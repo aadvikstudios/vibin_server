@@ -80,7 +80,6 @@ func (as *ActionService) ProcessAction(ctx context.Context, emailId, targetEmail
 	}
 }
 
-// AcceptPing accepts a ping and creates a match (also inserts a message)
 func (as *ActionService) AcceptPing(ctx context.Context, emailId, targetEmailId, pingNote string) (map[string]string, error) {
 	matchID := uuid.NewString()
 
@@ -94,6 +93,12 @@ func (as *ActionService) AcceptPing(ctx context.Context, emailId, targetEmailId,
 	err = as.CreateMessage(ctx, matchID, targetEmailId, pingNote, false, true)
 	if err != nil {
 		return nil, fmt.Errorf("failed to add match message: %w", err)
+	}
+
+	// Remove the accepted ping from the pings field
+	err = as.removePing(ctx, targetEmailId, emailId)
+	if err != nil {
+		return nil, fmt.Errorf("failed to remove ping: %w", err)
 	}
 
 	return map[string]string{"message": "It's a match!", "matchId": matchID}, nil
@@ -294,5 +299,43 @@ func (as *ActionService) CreateMessage(ctx context.Context, matchID, senderID, c
 	if err != nil {
 		return fmt.Errorf("failed to add message: %w", err)
 	}
+	return nil
+}
+
+func (as *ActionService) removePing(ctx context.Context, emailId, senderEmailId string) error {
+	// Retrieve the user profile
+	profile, err := as.GetUserProfile(ctx, emailId)
+	if err != nil {
+		return fmt.Errorf("failed to fetch user profile: %w", err)
+	}
+
+	// Check if pings exist
+	if pingsAttr, ok := profile["pings"]; ok {
+		pings := pingsAttr.(*types.AttributeValueMemberL).Value
+		var updatedPings []types.AttributeValue
+
+		// Filter out the ping from the sender
+		for _, ping := range pings {
+			pingMap := ping.(*types.AttributeValueMemberM).Value
+			if sender, exists := pingMap["senderEmailId"]; exists && sender.(*types.AttributeValueMemberS).Value != senderEmailId {
+				updatedPings = append(updatedPings, ping)
+			}
+		}
+
+		// Update the user profile in DynamoDB
+		updateExpression := "SET pings = :updatedPings"
+		expressionAttributeValues := map[string]types.AttributeValue{
+			":updatedPings": &types.AttributeValueMemberL{Value: updatedPings},
+		}
+
+		_, err = as.Dynamo.UpdateItem(ctx, "UserProfiles", updateExpression, map[string]types.AttributeValue{
+			"emailId": &types.AttributeValueMemberS{Value: emailId},
+		}, expressionAttributeValues, nil)
+
+		if err != nil {
+			return fmt.Errorf("failed to update pings list: %w", err)
+		}
+	}
+
 	return nil
 }
