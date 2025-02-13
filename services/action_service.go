@@ -199,17 +199,24 @@ func (as *ActionService) ExtractName(profile map[string]types.AttributeValue) st
 
 // CreateMatch creates a match entry for two users
 func (as *ActionService) createMatch(ctx context.Context, emailId, targetEmailId, matchID string) error {
-	matchData := map[string]types.AttributeValue{
+	// Match entry for `emailId` (stores `targetEmailId`)
+	matchEntryA := map[string]types.AttributeValue{
 		"matchId": &types.AttributeValueMemberS{Value: matchID},
 		"emailId": &types.AttributeValueMemberS{Value: targetEmailId},
 	}
 
-	// Add match entry for both users
-	if err := as.AddToList(ctx, emailId, "matches", &types.AttributeValueMemberM{Value: matchData}); err != nil {
-		return err
+	// Match entry for `targetEmailId` (stores `emailId`)
+	matchEntryB := map[string]types.AttributeValue{
+		"matchId": &types.AttributeValueMemberS{Value: matchID},
+		"emailId": &types.AttributeValueMemberS{Value: emailId},
 	}
-	if err := as.AddToList(ctx, targetEmailId, "matches", &types.AttributeValueMemberM{Value: matchData}); err != nil {
-		return err
+
+	// Add match entry for both users
+	if err := as.AddToList(ctx, emailId, "matches", &types.AttributeValueMemberM{Value: matchEntryA}); err != nil {
+		return fmt.Errorf("failed to add match for %s: %w", emailId, err)
+	}
+	if err := as.AddToList(ctx, targetEmailId, "matches", &types.AttributeValueMemberM{Value: matchEntryB}); err != nil {
+		return fmt.Errorf("failed to add match for %s: %w", targetEmailId, err)
 	}
 
 	return nil
@@ -252,13 +259,13 @@ func (as *ActionService) AddToList(ctx context.Context, userProfileEmail, attrib
 	return nil
 }
 
-// RemoveFromList removes an email ID from a user's list attribute in DynamoDB.
 func (as *ActionService) RemoveFromList(ctx context.Context, userProfileEmail, attribute, emailIdToRemove string) error {
 	profile, err := as.GetUserProfile(ctx, userProfileEmail)
 	if err != nil {
 		return fmt.Errorf("failed to fetch user profile: %w", err)
 	}
 
+	// Check if the list attribute exists
 	listAttr, exists := profile[attribute]
 	if !exists {
 		return fmt.Errorf("list '%s' not found", attribute)
@@ -269,17 +276,29 @@ func (as *ActionService) RemoveFromList(ctx context.Context, userProfileEmail, a
 		return fmt.Errorf("list '%s' is empty", attribute)
 	}
 
+	// Find the index of the item to remove
+	var itemIndex int = -1
 	for i, item := range listValues.Value {
 		if email, ok := item.(*types.AttributeValueMemberS); ok && email.Value == emailIdToRemove {
-			updateExpression := fmt.Sprintf("REMOVE %s[%d]", attribute, i)
-			_, err := as.Dynamo.UpdateItem(ctx, "UserProfiles", updateExpression,
-				map[string]types.AttributeValue{"emailId": &types.AttributeValueMemberS{Value: userProfileEmail}}, nil, nil,
-			)
-			if err != nil {
-				return fmt.Errorf("failed to remove email from %s list: %w", attribute, err)
-			}
+			itemIndex = i
 			break
 		}
+	}
+
+	// If item is not found, return without making an unnecessary update
+	if itemIndex == -1 {
+		return fmt.Errorf("email '%s' not found in list '%s'", emailIdToRemove, attribute)
+	}
+
+	// Construct REMOVE expression
+	updateExpression := fmt.Sprintf("REMOVE %s[%d]", attribute, itemIndex)
+
+	_, err = as.Dynamo.UpdateItem(ctx, "UserProfiles", updateExpression,
+		map[string]types.AttributeValue{"emailId": &types.AttributeValueMemberS{Value: userProfileEmail}}, nil, nil,
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to remove email from %s list: %w", attribute, err)
 	}
 
 	return nil
