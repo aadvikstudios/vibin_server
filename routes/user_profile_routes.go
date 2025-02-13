@@ -14,6 +14,6 @@ func RegisterUserProfileRoutes(r *mux.Router, userProfileService *services.UserP
 
 	profileRouter := r.PathPrefix("/api/profiles").Subrouter()
 	profileRouter.HandleFunc("", controller.CreateUserProfile).Methods("POST")
-	profileRouter.HandleFunc("/email/{emailId}", controller.GetUserProfileByEmail).Methods("GET")
+	profileRouter.HandleFunc("/email/profile", controller.GetUserProfileByEmail).Methods("POST")
 
 }

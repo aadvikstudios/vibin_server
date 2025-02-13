@@ -89,29 +89,38 @@ func (c *UserProfileController) GetUserProfileByID(w http.ResponseWriter, r *htt
 	json.NewEncoder(w).Encode(profile)
 }
 
-// GetUserProfileByEmail handles fetching a user profile by email
 func (c *UserProfileController) GetUserProfileByEmail(w http.ResponseWriter, r *http.Request) {
-	emailID := mux.Vars(r)["emailId"]
-	targetEmailId, exists := mux.Vars(r)["targetEmailId"] // Check if targetEmailId exists
-
-	// Convert targetEmailId to pointer if it exists, otherwise pass nil
-	var targetEmailPtr *string
-	if exists && targetEmailId != "" {
-		targetEmailPtr = &targetEmailId
+	var request struct {
+		EmailId       string  `json:"emailId"`
+		TargetEmailId *string `json:"targetEmailId,omitempty"` // Pointer allows it to be optional
 	}
 
-	// Fetch the user profile, dynamically computing distance if targetEmailPtr is provided
-	profile, err := c.UserProfileService.GetUserProfileByEmail(context.TODO(), emailID, targetEmailPtr)
-	if err != nil {
-		http.Error(w, "Failed to fetch profile by email", http.StatusInternalServerError)
+	// Decode the request body
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		http.Error(w, "Invalid request payload", http.StatusBadRequest)
 		return
 	}
 
+	// Ensure emailId is provided
+	if request.EmailId == "" {
+		http.Error(w, "Missing required field: emailId", http.StatusBadRequest)
+		return
+	}
+
+	// Call service to fetch the profile (distance included if targetEmailId is present)
+	profile, err := c.UserProfileService.GetUserProfileByEmail(context.TODO(), request.EmailId, request.TargetEmailId)
+	if err != nil {
+		http.Error(w, "Failed to fetch profile", http.StatusInternalServerError)
+		return
+	}
+
+	// Handle case where profile is not found
 	if profile == nil {
 		http.Error(w, "Profile not found", http.StatusNotFound)
 		return
 	}
 
+	// Return profile with/without distance
 	json.NewEncoder(w).Encode(profile)
 }
 
