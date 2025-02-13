@@ -96,7 +96,7 @@ func (as *ActionService) AcceptPing(ctx context.Context, emailId, targetEmailId,
 	}
 
 	// Remove the ping after acceptance
-	err = as.removePing(ctx, emailId)
+	err = as.removePing(ctx, emailId, targetEmailId)
 	if err != nil {
 		return nil, fmt.Errorf("failed to remove ping after acceptance: %w", err)
 	}
@@ -120,7 +120,7 @@ func (as *ActionService) DeclinePing(ctx context.Context, emailId, targetEmailId
 	}
 
 	// Remove the ping after declining
-	err = as.removePing(ctx, emailId)
+	err = as.removePing(ctx, emailId, targetEmailId)
 	if err != nil {
 		return fmt.Errorf("failed to remove ping after decline: %w", err)
 	}
@@ -310,8 +310,8 @@ func (as *ActionService) CreateMessage(ctx context.Context, matchID, senderID, c
 	return nil
 }
 
-func (as *ActionService) removePing(ctx context.Context, emailId string) error {
-	// Retrieve the user profile
+func (as *ActionService) removePing(ctx context.Context, emailId, senderEmailId string) error {
+	// Retrieve the user profile of the current user (who received the ping)
 	profile, err := as.GetUserProfile(ctx, emailId)
 	if err != nil {
 		return fmt.Errorf("failed to fetch user profile: %w", err)
@@ -321,13 +321,21 @@ func (as *ActionService) removePing(ctx context.Context, emailId string) error {
 	if pingsAttr, ok := profile["pings"]; ok {
 		pings := pingsAttr.(*types.AttributeValueMemberL).Value
 		var updatedPings []types.AttributeValue
+		pingRemoved := false
 
 		// Filter out the ping from the sender
 		for _, ping := range pings {
 			pingMap := ping.(*types.AttributeValueMemberM).Value
-			if sender, exists := pingMap["emailId"]; exists && sender.(*types.AttributeValueMemberS).Value != emailId {
-				updatedPings = append(updatedPings, ping)
+			if sender, exists := pingMap["senderEmailId"]; exists && sender.(*types.AttributeValueMemberS).Value == senderEmailId {
+				pingRemoved = true
+				continue // Skip adding this ping to the new list
 			}
+			updatedPings = append(updatedPings, ping)
+		}
+
+		// If no ping was removed, return early (no need to update)
+		if !pingRemoved {
+			return nil
 		}
 
 		// Construct update expression
@@ -343,7 +351,7 @@ func (as *ActionService) removePing(ctx context.Context, emailId string) error {
 			updateExpression = "REMOVE pings"
 		}
 
-		// Update the user profile in DynamoDB
+		// Update the user profile in DynamoDB (on current user's profile)
 		_, err = as.Dynamo.UpdateItem(ctx, "UserProfiles", updateExpression, map[string]types.AttributeValue{
 			"emailId": &types.AttributeValueMemberS{Value: emailId},
 		}, expressionAttributeValues, nil)
