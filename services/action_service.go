@@ -250,7 +250,6 @@ func (as *ActionService) AddToList(ctx context.Context, userProfileEmail, attrib
 
 	return nil
 }
-
 func (as *ActionService) RemoveFromList(ctx context.Context, userProfileEmail, attribute, emailIdToRemove string) error {
 	profile, err := as.GetUserProfile(ctx, userProfileEmail)
 	if err != nil {
@@ -260,12 +259,12 @@ func (as *ActionService) RemoveFromList(ctx context.Context, userProfileEmail, a
 	// Check if the list attribute exists
 	listAttr, exists := profile[attribute]
 	if !exists {
-		return fmt.Errorf("list '%s' not found", attribute)
+		return fmt.Errorf("list '%s' not found in user profile", attribute)
 	}
 
 	listValues, ok := listAttr.(*types.AttributeValueMemberL)
 	if !ok || len(listValues.Value) == 0 {
-		return fmt.Errorf("list '%s' is empty", attribute)
+		return fmt.Errorf("list '%s' is empty, cannot remove item", attribute)
 	}
 
 	// Find the index of the item to remove
@@ -277,12 +276,12 @@ func (as *ActionService) RemoveFromList(ctx context.Context, userProfileEmail, a
 		}
 	}
 
-	// If item is not found, return without making an unnecessary update
+	// If item is not found, return error
 	if itemIndex == -1 {
 		return fmt.Errorf("email '%s' not found in list '%s'", emailIdToRemove, attribute)
 	}
 
-	// Check if `ExpressionAttributeValues` is empty before passing to DynamoDB
+	// Construct REMOVE expression
 	updateExpression := fmt.Sprintf("REMOVE %s[%d]", attribute, itemIndex)
 
 	_, err = as.Dynamo.UpdateItem(ctx, "UserProfiles", updateExpression,
