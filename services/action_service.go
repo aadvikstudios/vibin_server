@@ -67,14 +67,6 @@ func (as *ActionService) AcceptPing(ctx context.Context, emailId, targetEmailId,
 		return nil, fmt.Errorf("failed to create match: %w", err)
 	}
 
-	// Add match ID to both users' "matches" lists
-	if err := as.AddToList(ctx, emailId, "matches", &types.AttributeValueMemberS{Value: matchID}); err != nil {
-		return nil, fmt.Errorf("failed to update matches list for %s: %w", emailId, err)
-	}
-	if err := as.AddToList(ctx, targetEmailId, "matches", &types.AttributeValueMemberS{Value: matchID}); err != nil {
-		return nil, fmt.Errorf("failed to update matches list for %s: %w", targetEmailId, err)
-	}
-
 	// Send a message for the match
 	if err := as.CreateMessage(ctx, matchID, targetEmailId, pingNote, false, true); err != nil {
 		return nil, fmt.Errorf("failed to add match message: %w", err)
