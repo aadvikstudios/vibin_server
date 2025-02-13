@@ -96,7 +96,7 @@ func (as *ActionService) AcceptPing(ctx context.Context, emailId, targetEmailId,
 	}
 
 	// Remove the ping after acceptance
-	err = as.removePing(ctx, targetEmailId, emailId)
+	err = as.removePing(ctx, emailId)
 	if err != nil {
 		return nil, fmt.Errorf("failed to remove ping after acceptance: %w", err)
 	}
@@ -120,7 +120,7 @@ func (as *ActionService) DeclinePing(ctx context.Context, emailId, targetEmailId
 	}
 
 	// Remove the ping after declining
-	err = as.removePing(ctx, emailId, targetEmailId)
+	err = as.removePing(ctx, emailId)
 	if err != nil {
 		return fmt.Errorf("failed to remove ping after decline: %w", err)
 	}
@@ -310,7 +310,7 @@ func (as *ActionService) CreateMessage(ctx context.Context, matchID, senderID, c
 	return nil
 }
 
-func (as *ActionService) removePing(ctx context.Context, emailId, senderEmailId string) error {
+func (as *ActionService) removePing(ctx context.Context, emailId string) error {
 	// Retrieve the user profile
 	profile, err := as.GetUserProfile(ctx, emailId)
 	if err != nil {
@@ -325,7 +325,7 @@ func (as *ActionService) removePing(ctx context.Context, emailId, senderEmailId 
 		// Filter out the ping from the sender
 		for _, ping := range pings {
 			pingMap := ping.(*types.AttributeValueMemberM).Value
-			if sender, exists := pingMap["senderEmailId"]; exists && sender.(*types.AttributeValueMemberS).Value != senderEmailId {
+			if sender, exists := pingMap["emailId"]; exists && sender.(*types.AttributeValueMemberS).Value != emailId {
 				updatedPings = append(updatedPings, ping)
 			}
 		}
