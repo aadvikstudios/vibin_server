@@ -312,45 +312,59 @@ func (as *ActionService) CreateMessage(ctx context.Context, matchID, senderID, c
 }
 
 func (as *ActionService) removePing(ctx context.Context, emailId, senderEmailId string) error {
+	log.Printf("Starting removePing for emailId: %s, senderEmailId: %s", emailId, senderEmailId)
+
 	// Retrieve the user profile
 	profile, err := as.GetUserProfile(ctx, emailId)
 	if err != nil {
+		log.Printf("Failed to fetch user profile for emailId: %s, Error: %v", emailId, err)
 		return fmt.Errorf("failed to fetch user profile: %w", err)
 	}
 
+	log.Printf("Fetched user profile for emailId: %s, Profile Data: %+v", emailId, profile)
+
 	// Check if pings exist
-	if pingsAttr, ok := profile["pings"]; ok {
-		pings := pingsAttr.(*types.AttributeValueMemberL).Value
-		var pingIndex int = -1
-
-		// Find the index of the ping where senderEmailId matches
-		for i, ping := range pings {
-			pingMap := ping.(*types.AttributeValueMemberM).Value
-			if sender, exists := pingMap["senderEmailId"]; exists && sender.(*types.AttributeValueMemberS).Value == senderEmailId {
-				pingIndex = i
-				break
-			}
-		}
-
-		// If no matching ping was found, return early
-		if pingIndex == -1 {
-			return fmt.Errorf("ping from senderEmailId '%s' not found in emailId '%s' profile", senderEmailId, emailId)
-		}
-
-		// Construct the update expression to remove the specific index
-		updateExpression := fmt.Sprintf("REMOVE pings[%d]", pingIndex)
-
-		// Update the user profile in DynamoDB
-		_, err = as.Dynamo.UpdateItem(ctx, "UserProfiles", updateExpression, map[string]types.AttributeValue{
-			"emailId": &types.AttributeValueMemberS{Value: emailId},
-		}, nil, nil)
-
-		if err != nil {
-			return fmt.Errorf("failed to remove ping from list: %w", err)
-		}
-
-		log.Printf("Successfully removed ping at index %d for emailId %s", pingIndex, emailId)
+	pingsAttr, ok := profile["pings"]
+	if !ok {
+		log.Printf("No 'pings' list found for emailId: %s", emailId)
+		return nil
 	}
 
+	pings := pingsAttr.(*types.AttributeValueMemberL).Value
+	log.Printf("Existing pings for emailId %s: %+v", emailId, pings)
+
+	// Find the index of the ping where senderEmailId matches
+	var pingIndex int = -1
+	for i, ping := range pings {
+		pingMap := ping.(*types.AttributeValueMemberM).Value
+		if sender, exists := pingMap["senderEmailId"]; exists && sender.(*types.AttributeValueMemberS).Value == senderEmailId {
+			pingIndex = i
+			break
+		}
+	}
+
+	// If no matching ping was found, return early
+	if pingIndex == -1 {
+		log.Printf("Ping from senderEmailId '%s' not found in emailId '%s' profile", senderEmailId, emailId)
+		return fmt.Errorf("ping from senderEmailId '%s' not found in emailId '%s' profile", senderEmailId, emailId)
+	}
+
+	log.Printf("Found ping at index %d for emailId %s", pingIndex, emailId)
+
+	// Construct the update expression to remove the specific index
+	updateExpression := fmt.Sprintf("REMOVE pings[%d]", pingIndex)
+	log.Printf("Constructed update expression: %s", updateExpression)
+
+	// Update the user profile in DynamoDB
+	_, err = as.Dynamo.UpdateItem(ctx, "UserProfiles", updateExpression, map[string]types.AttributeValue{
+		"emailId": &types.AttributeValueMemberS{Value: emailId},
+	}, nil, nil)
+
+	if err != nil {
+		log.Printf("Failed to remove ping from list for emailId: %s, Error: %v", emailId, err)
+		return fmt.Errorf("failed to remove ping from list: %w", err)
+	}
+
+	log.Printf("Successfully removed ping at index %d for emailId %s", pingIndex, emailId)
 	return nil
 }

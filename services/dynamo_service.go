@@ -106,18 +106,28 @@ func (ds *DynamoService) UpdateItem(
 	expressionAttributeValues map[string]types.AttributeValue,
 	expressionAttributeNames map[string]string,
 ) (map[string]types.AttributeValue, error) {
+
+	log.Printf("Starting UpdateItem for table: %s", tableName)
+	log.Printf("Update Expression: %s", updateExpression)
+	log.Printf("Key: %+v", key)
+	log.Printf("ExpressionAttributeValues: %+v", expressionAttributeValues)
+	log.Printf("ExpressionAttributeNames: %+v", expressionAttributeNames)
+
 	// Ensure key is not empty
 	if len(key) == 0 {
+		log.Println("Update failed: key cannot be empty")
 		return nil, errors.New("update failed: key cannot be empty")
 	}
 
 	// Ensure updateExpression is not empty
 	if updateExpression == "" {
+		log.Println("Update failed: updateExpression cannot be empty")
 		return nil, errors.New("update failed: updateExpression cannot be empty")
 	}
 
 	// Ensure expressionAttributeValues are not empty if needed
-	if len(expressionAttributeValues) == 0 {
+	if len(expressionAttributeValues) == 0 && updateExpression != "REMOVE pings[0]" {
+		log.Println("Update failed: expressionAttributeValues cannot be empty")
 		return nil, errors.New("update failed: expressionAttributeValues cannot be empty")
 	}
 
@@ -131,9 +141,12 @@ func (ds *DynamoService) UpdateItem(
 		ReturnValues:              types.ReturnValueAllNew,
 	}
 
+	log.Printf("Executing UpdateItem for table '%s' with input: %+v", tableName, updateInput)
+
 	// Execute the update operation
 	output, err := ds.Client.UpdateItem(ctx, updateInput)
 	if err != nil {
+		log.Printf("Failed to update item in table '%s': %v", tableName, err)
 		return nil, fmt.Errorf("failed to update item in table '%s': %w", tableName, err)
 	}
 
@@ -143,6 +156,7 @@ func (ds *DynamoService) UpdateItem(
 		return nil, nil
 	}
 
+	log.Printf("Successfully updated item in table '%s', Updated Attributes: %+v", tableName, output.Attributes)
 	return output.Attributes, nil
 }
 
