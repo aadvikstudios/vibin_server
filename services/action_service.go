@@ -80,8 +80,8 @@ func (as *ActionService) AcceptPing(ctx context.Context, emailId, targetEmailId,
 		return nil, fmt.Errorf("failed to add match message: %w", err)
 	}
 
-	// Remove the ping after acceptance
-	if err := as.RemoveFromList(ctx, emailId, "pings", targetEmailId); err != nil {
+	// Remove the ping after acceptance using `RemoveObjectFromList`
+	if err := as.RemoveObjectFromList(ctx, emailId, "pings", "senderEmailId", targetEmailId); err != nil {
 		return nil, fmt.Errorf("failed to remove ping after acceptance: %w", err)
 	}
 
@@ -95,8 +95,8 @@ func (as *ActionService) DeclinePing(ctx context.Context, emailId, targetEmailId
 		return fmt.Errorf("failed to add to notLiked list: %w", err)
 	}
 
-	// Remove targetEmailId from the "pings" list
-	if err := as.RemoveFromList(ctx, emailId, "pings", targetEmailId); err != nil {
+	// Remove the ping from the "pings" list using `RemoveObjectFromList`
+	if err := as.RemoveObjectFromList(ctx, emailId, "pings", "senderEmailId", targetEmailId); err != nil {
 		return fmt.Errorf("failed to remove from pings list: %w", err)
 	}
 
@@ -299,6 +299,55 @@ func (as *ActionService) RemoveFromList(ctx context.Context, userProfileEmail, a
 
 	if err != nil {
 		return fmt.Errorf("failed to remove email from %s list: %w", attribute, err)
+	}
+
+	return nil
+}
+
+func (as *ActionService) RemoveObjectFromList(ctx context.Context, userProfileEmail, attribute, field, targetValue string) error {
+	profile, err := as.GetUserProfile(ctx, userProfileEmail)
+	if err != nil {
+		return fmt.Errorf("failed to fetch user profile: %w", err)
+	}
+
+	// Check if the list attribute exists
+	listAttr, exists := profile[attribute]
+	if !exists {
+		return fmt.Errorf("list '%s' not found", attribute)
+	}
+
+	listValues, ok := listAttr.(*types.AttributeValueMemberL)
+	if !ok || len(listValues.Value) == 0 {
+		return fmt.Errorf("list '%s' is empty", attribute)
+	}
+
+	// Find the index of the object to remove based on the provided field
+	var itemIndex int = -1
+	for i, item := range listValues.Value {
+		if itemMap, ok := item.(*types.AttributeValueMemberM); ok {
+			if fieldValue, exists := itemMap.Value[field]; exists {
+				if value, ok := fieldValue.(*types.AttributeValueMemberS); ok && value.Value == targetValue {
+					itemIndex = i
+					break
+				}
+			}
+		}
+	}
+
+	// If item is not found, return without making an unnecessary update
+	if itemIndex == -1 {
+		return fmt.Errorf("item with %s '%s' not found in list '%s'", field, targetValue, attribute)
+	}
+
+	// Construct REMOVE expression
+	updateExpression := fmt.Sprintf("REMOVE %s[%d]", attribute, itemIndex)
+
+	_, err = as.Dynamo.UpdateItem(ctx, "UserProfiles", updateExpression,
+		map[string]types.AttributeValue{"emailId": &types.AttributeValueMemberS{Value: userProfileEmail}}, nil, nil,
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to remove item from %s list: %w", attribute, err)
 	}
 
 	return nil
