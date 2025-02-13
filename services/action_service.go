@@ -27,25 +27,17 @@ func (as *ActionService) GetUserProfile(ctx context.Context, emailId string) (ma
 func (as *ActionService) SendPing(ctx context.Context, emailId, targetEmailId, action, pingNote string) error {
 	createdAt := time.Now().UTC().Format(time.RFC3339)
 
-	newPing := map[string]types.AttributeValue{
-		"senderEmailId": &types.AttributeValueMemberS{Value: emailId},
-		"pingNote":      &types.AttributeValueMemberS{Value: pingNote},
-		"createdAt":     &types.AttributeValueMemberS{Value: createdAt},
+	newPing := &types.AttributeValueMemberM{
+		Value: map[string]types.AttributeValue{
+			"senderEmailId": &types.AttributeValueMemberS{Value: emailId},
+			"pingNote":      &types.AttributeValueMemberS{Value: pingNote},
+			"createdAt":     &types.AttributeValueMemberS{Value: createdAt},
+		},
 	}
 
-	updateExpression := "SET pings = list_append(if_not_exists(pings, :empty_list), :new_ping)"
-	expressionAttributeValues := map[string]types.AttributeValue{
-		":new_ping":   &types.AttributeValueMemberL{Value: []types.AttributeValue{&types.AttributeValueMemberM{Value: newPing}}},
-		":empty_list": &types.AttributeValueMemberL{Value: []types.AttributeValue{}},
-	}
-
-	key := map[string]types.AttributeValue{
-		"emailId": &types.AttributeValueMemberS{Value: targetEmailId},
-	}
-
-	_, err := as.Dynamo.UpdateItem(ctx, "UserProfiles", updateExpression, key, expressionAttributeValues, nil)
-	if err != nil {
-		return fmt.Errorf("failed to update target user profile with ping: %w", err)
+	// Add the ping to the target user's "pings" list
+	if err := as.AddToList(ctx, targetEmailId, "pings", newPing); err != nil {
+		return fmt.Errorf("failed to send ping: %w", err)
 	}
 
 	return nil
@@ -57,8 +49,7 @@ func (as *ActionService) ProcessPingAction(ctx context.Context, emailId, targetE
 	case "accept":
 		return as.AcceptPing(ctx, emailId, targetEmailId, pingNote)
 	case "decline":
-		err := as.DeclinePing(ctx, emailId, targetEmailId)
-		if err != nil {
+		if err := as.DeclinePing(ctx, emailId, targetEmailId); err != nil {
 			return nil, err
 		}
 		return map[string]string{"message": "Ping declined"}, nil
@@ -72,20 +63,25 @@ func (as *ActionService) AcceptPing(ctx context.Context, emailId, targetEmailId,
 	matchID := uuid.NewString()
 
 	// Create match entry in DynamoDB
-	err := as.createMatch(ctx, emailId, targetEmailId, matchID)
-	if err != nil {
+	if err := as.createMatch(ctx, emailId, targetEmailId, matchID); err != nil {
 		return nil, fmt.Errorf("failed to create match: %w", err)
 	}
 
-	// Use CreateMessage to insert a message
-	err = as.CreateMessage(ctx, matchID, targetEmailId, pingNote, false, true)
-	if err != nil {
+	// Add match ID to both users' "matches" lists
+	if err := as.AddToList(ctx, emailId, "matches", &types.AttributeValueMemberS{Value: matchID}); err != nil {
+		return nil, fmt.Errorf("failed to update matches list for %s: %w", emailId, err)
+	}
+	if err := as.AddToList(ctx, targetEmailId, "matches", &types.AttributeValueMemberS{Value: matchID}); err != nil {
+		return nil, fmt.Errorf("failed to update matches list for %s: %w", targetEmailId, err)
+	}
+
+	// Send a message for the match
+	if err := as.CreateMessage(ctx, matchID, targetEmailId, pingNote, false, true); err != nil {
 		return nil, fmt.Errorf("failed to add match message: %w", err)
 	}
 
 	// Remove the ping after acceptance
-	err = as.removeFromList(ctx, emailId, "pings", targetEmailId)
-	if err != nil {
+	if err := as.RemoveFromList(ctx, emailId, "pings", targetEmailId); err != nil {
 		return nil, fmt.Errorf("failed to remove ping after acceptance: %w", err)
 	}
 
@@ -94,57 +90,126 @@ func (as *ActionService) AcceptPing(ctx context.Context, emailId, targetEmailId,
 
 // DeclinePing declines a ping request
 func (as *ActionService) DeclinePing(ctx context.Context, emailId, targetEmailId string) error {
-	// Append the targetEmailId to the "notLiked" list
-	updateExpression := "SET notLiked = list_append(if_not_exists(notLiked, :empty), :targetEmailId)"
-	_, err := as.Dynamo.UpdateItem(ctx, "UserProfiles", updateExpression, map[string]types.AttributeValue{
-		"emailId": &types.AttributeValueMemberS{Value: emailId},
-	}, map[string]types.AttributeValue{
-		":empty":         &types.AttributeValueMemberL{Value: []types.AttributeValue{}},
-		":targetEmailId": &types.AttributeValueMemberS{Value: targetEmailId},
-	}, nil)
-
-	if err != nil {
-		return fmt.Errorf("failed to decline ping: %w", err)
+	// Add targetEmailId to the "notLiked" list
+	if err := as.AddToList(ctx, emailId, "notLiked", &types.AttributeValueMemberS{Value: targetEmailId}); err != nil {
+		return fmt.Errorf("failed to add to notLiked list: %w", err)
 	}
 
-	// Remove the ping after declining
-	err = as.removeFromList(ctx, emailId, "pings", targetEmailId)
-	if err != nil {
-		return fmt.Errorf("failed to remove ping after decline: %w", err)
+	// Remove targetEmailId from the "pings" list
+	if err := as.RemoveFromList(ctx, emailId, "pings", targetEmailId); err != nil {
+		return fmt.Errorf("failed to remove from pings list: %w", err)
 	}
 
 	return nil
 }
 
-// CreateMatch creates a match entry for two users
-func (as *ActionService) createMatch(ctx context.Context, emailId, targetEmailId, matchID string) error {
-	matchData := map[string]map[string]types.AttributeValue{
-		emailId: {
-			"matchId": &types.AttributeValueMemberS{Value: matchID},
-			"emailId": &types.AttributeValueMemberS{Value: targetEmailId},
-		},
-		targetEmailId: {
-			"matchId": &types.AttributeValueMemberS{Value: matchID},
-			"emailId": &types.AttributeValueMemberS{Value: emailId},
-		},
+// ProcessAction processes "liked" or "notliked" actions
+func (as *ActionService) ProcessAction(ctx context.Context, emailId, targetEmailId, action string) (map[string]string, error) {
+	switch action {
+	case "liked":
+		return as.handleLiked(ctx, emailId, targetEmailId)
+	case "notliked":
+		return as.handleNotLiked(ctx, emailId, targetEmailId)
+	default:
+		return nil, errors.New("invalid action")
+	}
+}
+
+func (as *ActionService) handleLiked(ctx context.Context, emailId, targetEmailId string) (map[string]string, error) {
+	// Fetch the target user's profile
+	targetProfile, err := as.GetUserProfile(ctx, targetEmailId)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch target user profile: %w", err)
 	}
 
-	for user, match := range matchData {
-		_, err := as.Dynamo.UpdateItem(ctx, "UserProfiles",
-			"SET matches = list_append(if_not_exists(matches, :empty), :newMatch)",
-			map[string]types.AttributeValue{
-				"emailId": &types.AttributeValueMemberS{Value: user},
-			},
-			map[string]types.AttributeValue{
-				":empty": &types.AttributeValueMemberL{Value: []types.AttributeValue{}},
-				":newMatch": &types.AttributeValueMemberL{Value: []types.AttributeValue{
-					&types.AttributeValueMemberM{Value: match},
-				}},
-			}, nil)
-
-		if err != nil {
-			return fmt.Errorf("failed to create match for user %s: %w", user, err)
+	// Check if the target user has already liked this user
+	if as.IsMutualLike(targetProfile, emailId) {
+		// Create a match if mutual like exists
+		matchID := uuid.NewString()
+		if err := as.createMatch(ctx, emailId, targetEmailId, matchID); err != nil {
+			return nil, err
 		}
+
+		// Remove mutual likes from both users
+		if err := as.RemoveMutualLikes(ctx, emailId, targetEmailId); err != nil {
+			return nil, err
+		}
+
+		// Send a match message
+		messageContent := fmt.Sprintf("You have matched with %s! Say Hi!", as.ExtractName(targetProfile))
+		if err := as.CreateMessage(ctx, matchID, "", messageContent, false, true); err != nil {
+			return nil, fmt.Errorf("failed to add match message: %w", err)
+		}
+
+		return map[string]string{"message": "It's a match!", "matchId": matchID}, nil
+	}
+
+	// Add targetEmailId to the "liked" list of the emailId user
+	if err := as.AddToList(ctx, emailId, "liked", &types.AttributeValueMemberS{Value: targetEmailId}); err != nil {
+		return nil, fmt.Errorf("failed to update liked list for emailId: %w", err)
+	}
+
+	// Add emailId to the "likedBy" list of the targetEmailId user
+	if err := as.AddToList(ctx, targetEmailId, "likedBy", &types.AttributeValueMemberS{Value: emailId}); err != nil {
+		return nil, fmt.Errorf("failed to update likedBy list for targetEmailId: %w", err)
+	}
+
+	return map[string]string{"message": "User liked successfully"}, nil
+}
+func (as *ActionService) handleNotLiked(ctx context.Context, emailId, targetEmailId string) (map[string]string, error) {
+	// Add targetEmailId to the "notLiked" list
+	if err := as.AddToList(ctx, emailId, "notLiked", &types.AttributeValueMemberS{Value: targetEmailId}); err != nil {
+		return nil, fmt.Errorf("failed to update notLiked list: %w", err)
+	}
+
+	return map[string]string{"message": "User added to notLiked list"}, nil
+}
+
+func (as *ActionService) IsMutualLike(targetProfile map[string]types.AttributeValue, emailId string) bool {
+	if likedAttr, ok := targetProfile["liked"]; ok {
+		likedUsers := likedAttr.(*types.AttributeValueMemberL).Value
+		for _, user := range likedUsers {
+			if user.(*types.AttributeValueMemberS).Value == emailId {
+				return true
+			}
+		}
+	}
+	return false
+}
+func (as *ActionService) RemoveMutualLikes(ctx context.Context, emailId, targetEmailId string) error {
+	if err := as.RemoveFromList(ctx, emailId, "likedBy", targetEmailId); err != nil {
+		return fmt.Errorf("failed to remove targetEmailId from likedBy list: %w", err)
+	}
+
+	if err := as.RemoveFromList(ctx, targetEmailId, "liked", emailId); err != nil {
+		return fmt.Errorf("failed to remove emailId from liked list: %w", err)
+	}
+
+	return nil
+}
+
+func (as *ActionService) ExtractName(profile map[string]types.AttributeValue) string {
+	if nameAttr, ok := profile["name"]; ok {
+		if name, ok := nameAttr.(*types.AttributeValueMemberS); ok {
+			return name.Value
+		}
+	}
+	return "Unknown"
+}
+
+// CreateMatch creates a match entry for two users
+func (as *ActionService) createMatch(ctx context.Context, emailId, targetEmailId, matchID string) error {
+	matchData := map[string]types.AttributeValue{
+		"matchId": &types.AttributeValueMemberS{Value: matchID},
+		"emailId": &types.AttributeValueMemberS{Value: targetEmailId},
+	}
+
+	// Add match entry for both users
+	if err := as.AddToList(ctx, emailId, "matches", &types.AttributeValueMemberM{Value: matchData}); err != nil {
+		return err
+	}
+	if err := as.AddToList(ctx, targetEmailId, "matches", &types.AttributeValueMemberM{Value: matchData}); err != nil {
+		return err
 	}
 
 	return nil
@@ -162,50 +227,59 @@ func (as *ActionService) CreateMessage(ctx context.Context, matchID, senderID, c
 		"isUnread":  isUnread,
 	}
 
-	err := as.Dynamo.PutItem(ctx, "Messages", message)
-	if err != nil {
+	if err := as.Dynamo.PutItem(ctx, "Messages", message); err != nil {
 		return fmt.Errorf("failed to add message: %w", err)
 	}
 	return nil
 }
 
-// Reusable method to remove an item from a list
-func (as *ActionService) removeFromList(ctx context.Context, emailId, listName, targetValue string) error {
-	profile, err := as.GetUserProfile(ctx, emailId)
+// AddToList updates a user's list attribute (e.g., "pings", "matches", "notLiked") by appending a new value.
+func (as *ActionService) AddToList(ctx context.Context, userProfileEmail, attribute string, value types.AttributeValue) error {
+	updateExpression := fmt.Sprintf("SET %s = list_append(if_not_exists(%s, :empty), :newItem)", attribute, attribute)
+
+	_, err := as.Dynamo.UpdateItem(ctx, "UserProfiles", updateExpression,
+		map[string]types.AttributeValue{"emailId": &types.AttributeValueMemberS{Value: userProfileEmail}},
+		map[string]types.AttributeValue{
+			":empty":   &types.AttributeValueMemberL{Value: []types.AttributeValue{}},
+			":newItem": &types.AttributeValueMemberL{Value: []types.AttributeValue{value}},
+		}, nil,
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to add item to %s list: %w", attribute, err)
+	}
+
+	return nil
+}
+
+// RemoveFromList removes an email ID from a user's list attribute in DynamoDB.
+func (as *ActionService) RemoveFromList(ctx context.Context, userProfileEmail, attribute, emailIdToRemove string) error {
+	profile, err := as.GetUserProfile(ctx, userProfileEmail)
 	if err != nil {
 		return fmt.Errorf("failed to fetch user profile: %w", err)
 	}
 
-	listAttr, exists := profile[listName]
+	listAttr, exists := profile[attribute]
 	if !exists {
-		return fmt.Errorf("list '%s' not found", listName)
+		return fmt.Errorf("list '%s' not found", attribute)
 	}
 
 	listValues, ok := listAttr.(*types.AttributeValueMemberL)
 	if !ok || len(listValues.Value) == 0 {
-		return fmt.Errorf("list '%s' is empty", listName)
+		return fmt.Errorf("list '%s' is empty", attribute)
 	}
 
-	var itemIndex int = -1
 	for i, item := range listValues.Value {
-		if item.(*types.AttributeValueMemberS).Value == targetValue {
-			itemIndex = i
+		if email, ok := item.(*types.AttributeValueMemberS); ok && email.Value == emailIdToRemove {
+			updateExpression := fmt.Sprintf("REMOVE %s[%d]", attribute, i)
+			_, err := as.Dynamo.UpdateItem(ctx, "UserProfiles", updateExpression,
+				map[string]types.AttributeValue{"emailId": &types.AttributeValueMemberS{Value: userProfileEmail}}, nil, nil,
+			)
+			if err != nil {
+				return fmt.Errorf("failed to remove email from %s list: %w", attribute, err)
+			}
 			break
 		}
-	}
-
-	if itemIndex == -1 {
-		return fmt.Errorf("target value not found in list '%s'", listName)
-	}
-
-	updateExpression := fmt.Sprintf("REMOVE %s[%d]", listName, itemIndex)
-
-	_, err = as.Dynamo.UpdateItem(ctx, "UserProfiles", updateExpression, map[string]types.AttributeValue{
-		"emailId": &types.AttributeValueMemberS{Value: emailId},
-	}, nil, nil)
-
-	if err != nil {
-		return fmt.Errorf("failed to remove item from list: %w", err)
 	}
 
 	return nil
