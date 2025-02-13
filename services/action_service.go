@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 	"vibin_server/utils"
 
@@ -320,45 +321,35 @@ func (as *ActionService) removePing(ctx context.Context, emailId, senderEmailId 
 	// Check if pings exist
 	if pingsAttr, ok := profile["pings"]; ok {
 		pings := pingsAttr.(*types.AttributeValueMemberL).Value
-		var updatedPings []types.AttributeValue
-		pingRemoved := false
+		var pingIndex int = -1
 
-		// Filter out the ping from the sender
-		for _, ping := range pings {
+		// Find the index of the ping where senderEmailId matches
+		for i, ping := range pings {
 			pingMap := ping.(*types.AttributeValueMemberM).Value
 			if sender, exists := pingMap["senderEmailId"]; exists && sender.(*types.AttributeValueMemberS).Value == senderEmailId {
-				pingRemoved = true
-				continue // Skip adding this ping to the new list
+				pingIndex = i
+				break
 			}
-			updatedPings = append(updatedPings, ping)
 		}
 
-		// If no ping was removed, return early
-		if !pingRemoved {
-			return nil
+		// If no matching ping was found, return early
+		if pingIndex == -1 {
+			return fmt.Errorf("ping from senderEmailId '%s' not found in emailId '%s' profile", senderEmailId, emailId)
 		}
 
-		// Construct update expression
-		var updateExpression string
-		expressionAttributeValues := make(map[string]types.AttributeValue)
-
-		if len(updatedPings) > 0 {
-			// If there are remaining pings, update the field
-			updateExpression = "SET pings = :updatedPings"
-			expressionAttributeValues[":updatedPings"] = &types.AttributeValueMemberL{Value: updatedPings}
-		} else {
-			// If no pings remain, remove the field
-			updateExpression = "REMOVE pings"
-		}
+		// Construct the update expression to remove the specific index
+		updateExpression := fmt.Sprintf("REMOVE pings[%d]", pingIndex)
 
 		// Update the user profile in DynamoDB
 		_, err = as.Dynamo.UpdateItem(ctx, "UserProfiles", updateExpression, map[string]types.AttributeValue{
 			"emailId": &types.AttributeValueMemberS{Value: emailId},
-		}, expressionAttributeValues, nil)
+		}, nil, nil)
 
 		if err != nil {
-			return fmt.Errorf("failed to update pings list: %w", err)
+			return fmt.Errorf("failed to remove ping from list: %w", err)
 		}
+
+		log.Printf("Successfully removed ping at index %d for emailId %s", pingIndex, emailId)
 	}
 
 	return nil
