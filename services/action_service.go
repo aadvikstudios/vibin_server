@@ -95,10 +95,10 @@ func (as *ActionService) AcceptPing(ctx context.Context, emailId, targetEmailId,
 		return nil, fmt.Errorf("failed to add match message: %w", err)
 	}
 
-	// Remove the accepted ping from the pings field
+	// Remove the ping after acceptance
 	err = as.removePing(ctx, targetEmailId, emailId)
 	if err != nil {
-		return nil, fmt.Errorf("failed to remove ping: %w", err)
+		return nil, fmt.Errorf("failed to remove ping after acceptance: %w", err)
 	}
 
 	return map[string]string{"message": "It's a match!", "matchId": matchID}, nil
@@ -106,6 +106,7 @@ func (as *ActionService) AcceptPing(ctx context.Context, emailId, targetEmailId,
 
 // DeclinePing declines a ping request
 func (as *ActionService) DeclinePing(ctx context.Context, emailId, targetEmailId string) error {
+	// Append the targetEmailId to the "notLiked" list
 	updateExpression := "SET notLiked = list_append(if_not_exists(notLiked, :empty), :targetEmailId)"
 	_, err := as.Dynamo.UpdateItem(ctx, "UserProfiles", updateExpression, map[string]types.AttributeValue{
 		"emailId": &types.AttributeValueMemberS{Value: emailId},
@@ -117,6 +118,13 @@ func (as *ActionService) DeclinePing(ctx context.Context, emailId, targetEmailId
 	if err != nil {
 		return fmt.Errorf("failed to decline ping: %w", err)
 	}
+
+	// Remove the ping after declining
+	err = as.removePing(ctx, emailId, targetEmailId)
+	if err != nil {
+		return fmt.Errorf("failed to remove ping after decline: %w", err)
+	}
+
 	return nil
 }
 
