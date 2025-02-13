@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"vibin_server/models"
+	"vibin_server/utils"
 
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
@@ -47,8 +49,47 @@ func (ups *UserProfileService) GetUserProfile(ctx context.Context, userID string
 
 	return &profile, nil
 }
+func (ups *UserProfileService) GetUserProfileByEmail(ctx context.Context, emailID string, targetEmailID *string) (*models.UserProfile, error) {
+	log.Printf("Fetching profile for email: %s\n", emailID)
 
-func (ups *UserProfileService) GetUserProfileByEmail(ctx context.Context, emailID string) (*models.UserProfile, error) {
+	// Fetch the main user profile
+	profile, err := ups.GetUserProfileByEmailWithoutDistance(ctx, emailID)
+	if err != nil || profile == nil {
+		log.Printf("Error fetching profile: %v\n", err)
+		return nil, fmt.Errorf("failed to fetch profile: %w", err)
+	}
+
+	// If no targetEmailID is provided, return only the profile
+	if targetEmailID == nil || *targetEmailID == "" {
+		log.Printf("Returning profile without distance calculation (no target email provided).")
+		return profile, nil
+	}
+
+	// Fetch the target profile for distance calculation
+	targetProfile, err := ups.GetUserProfileByEmailWithoutDistance(ctx, *targetEmailID)
+	if err != nil || targetProfile == nil {
+		log.Printf("Error fetching target profile: %v\n", err)
+		return nil, fmt.Errorf("failed to fetch target profile: %w", err)
+	}
+
+	// Ensure both profiles have valid latitude and longitude
+	if profile.Latitude == 0 || profile.Longitude == 0 || targetProfile.Latitude == 0 || targetProfile.Longitude == 0 {
+		log.Printf("⚠️ One or both profiles missing latitude/longitude, skipping distance calculation")
+		return profile, nil // Return the profile without distance if lat/lon is missing
+	}
+
+	// Calculate distance between the two users
+	distance := utils.CalculateDistance(profile.Latitude, profile.Longitude, targetProfile.Latitude, targetProfile.Longitude)
+
+	// Attach the distance to the profile
+	profile.DistanceBetween = math.Round(distance*100) / 100 // Round to 2 decimal places
+
+	log.Printf("✅ Distance calculated between %s and %s: %.2f km\n", emailID, *targetEmailID, profile.DistanceBetween)
+	return profile, nil
+}
+
+// Helper function to fetch a profile by email WITHOUT distance calculation
+func (ups *UserProfileService) GetUserProfileByEmailWithoutDistance(ctx context.Context, emailID string) (*models.UserProfile, error) {
 	log.Printf("Fetching profile by email: %s\n", emailID)
 
 	keyCondition := "emailId = :emailId"

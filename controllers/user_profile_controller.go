@@ -92,8 +92,8 @@ func (c *UserProfileController) GetUserProfileByID(w http.ResponseWriter, r *htt
 // GetUserProfileByEmail handles fetching a user profile by email
 func (c *UserProfileController) GetUserProfileByEmail(w http.ResponseWriter, r *http.Request) {
 	emailID := mux.Vars(r)["emailId"]
-
-	profile, err := c.UserProfileService.GetUserProfileByEmail(context.TODO(), emailID)
+	targetEmailId := mux.Vars(r)["targetEmailId"]
+	profile, err := c.UserProfileService.GetUserProfileByEmail(context.TODO(), emailID, targetEmailId)
 	if err != nil {
 		http.Error(w, "Failed to fetch profile by email", http.StatusInternalServerError)
 		return
