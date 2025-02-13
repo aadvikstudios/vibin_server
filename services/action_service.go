@@ -330,12 +330,20 @@ func (as *ActionService) removePing(ctx context.Context, emailId, senderEmailId 
 			}
 		}
 
-		// Update the user profile in DynamoDB
-		updateExpression := "SET pings = :updatedPings"
-		expressionAttributeValues := map[string]types.AttributeValue{
-			":updatedPings": &types.AttributeValueMemberL{Value: updatedPings},
+		// Construct update expression
+		updateExpression := ""
+		expressionAttributeValues := map[string]types.AttributeValue{}
+
+		if len(updatedPings) > 0 {
+			// If there are remaining pings, update the field
+			updateExpression = "SET pings = :updatedPings"
+			expressionAttributeValues[":updatedPings"] = &types.AttributeValueMemberL{Value: updatedPings}
+		} else {
+			// If no pings remain, remove the field
+			updateExpression = "REMOVE pings"
 		}
 
+		// Update the user profile in DynamoDB
 		_, err = as.Dynamo.UpdateItem(ctx, "UserProfiles", updateExpression, map[string]types.AttributeValue{
 			"emailId": &types.AttributeValueMemberS{Value: emailId},
 		}, expressionAttributeValues, nil)
