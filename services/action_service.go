@@ -339,8 +339,8 @@ func (as *ActionService) removePing(ctx context.Context, emailId, senderEmailId 
 		}
 
 		// Construct update expression
-		updateExpression := ""
-		expressionAttributeValues := map[string]types.AttributeValue{}
+		var updateExpression string
+		expressionAttributeValues := make(map[string]types.AttributeValue)
 
 		if len(updatedPings) > 0 {
 			// If there are remaining pings, update the field
