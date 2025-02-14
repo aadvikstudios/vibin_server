@@ -261,50 +261,78 @@ func (as *ActionService) AddToList(ctx context.Context, userProfileEmail, attrib
 
 	return nil
 }
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+)
+
 func (as *ActionService) RemoveFromList(ctx context.Context, userProfileEmail, attribute, emailIdToRemove string) error {
+	log.Printf("🚀 Initiating removal: userProfileEmail=%s, attribute=%s, emailIdToRemove=%s", userProfileEmail, attribute, emailIdToRemove)
+
+	// Fetch user profile
+	log.Printf("➡ Fetching user profile for %s", userProfileEmail)
 	profile, err := as.GetUserProfile(ctx, userProfileEmail)
 	if err != nil {
+		log.Printf("❌ Failed to fetch user profile: %v", err)
 		return fmt.Errorf("failed to fetch user profile: %w", err)
 	}
+	log.Printf("✅ Successfully fetched user profile")
 
 	// Check if the list attribute exists
+	log.Printf("➡ Checking if attribute '%s' exists in profile", attribute)
 	listAttr, exists := profile[attribute]
 	if !exists {
+		log.Printf("❌ Attribute '%s' not found in user profile", attribute)
 		return fmt.Errorf("list '%s' not found in user profile", attribute)
 	}
 
 	listValues, ok := listAttr.(*types.AttributeValueMemberL)
 	if !ok || len(listValues.Value) == 0 {
+		log.Printf("❌ Attribute '%s' is empty, cannot remove item", attribute)
 		return fmt.Errorf("list '%s' is empty, cannot remove item", attribute)
 	}
 
 	// Find the index of the item to remove
+	log.Printf("➡ Searching for '%s' in list '%s'", emailIdToRemove, attribute)
 	var itemIndex int = -1
 	for i, item := range listValues.Value {
 		if email, ok := item.(*types.AttributeValueMemberS); ok && email.Value == emailIdToRemove {
 			itemIndex = i
+			log.Printf("✅ Found '%s' at index %d in list '%s'", emailIdToRemove, itemIndex, attribute)
 			break
 		}
 	}
 
 	// If item is not found, return error
 	if itemIndex == -1 {
+		log.Printf("❌ Email '%s' not found in list '%s'", emailIdToRemove, attribute)
 		return fmt.Errorf("email '%s' not found in list '%s'", emailIdToRemove, attribute)
 	}
 
 	// Construct REMOVE expression
 	updateExpression := fmt.Sprintf("REMOVE %s[%d]", attribute, itemIndex)
+	log.Printf("➡ Constructed update expression: %s", updateExpression)
 
+	// Perform update operation
+	log.Printf("➡ Removing '%s' from list '%s' in DynamoDB", emailIdToRemove, attribute)
 	_, err = as.Dynamo.UpdateItem(ctx, "UserProfiles", updateExpression,
 		map[string]types.AttributeValue{"emailId": &types.AttributeValueMemberS{Value: userProfileEmail}}, nil, nil,
 	)
 
 	if err != nil {
+		log.Printf("❌ Failed to remove email from '%s' list: %v", attribute, err)
 		return fmt.Errorf("failed to remove email from %s list: %w", attribute, err)
 	}
 
+	log.Printf("✅ Successfully removed '%s' from list '%s'", emailIdToRemove, attribute)
 	return nil
 }
+
 
 func (as *ActionService) RemoveObjectFromList(ctx context.Context, userProfileEmail, attribute, field, targetValue string) error {
 	profile, err := as.GetUserProfile(ctx, userProfileEmail)
