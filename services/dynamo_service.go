@@ -97,7 +97,6 @@ func (ds *DynamoService) GetItem(ctx context.Context, tableName string, key map[
 
 	return output.Item, nil
 }
-
 func (ds *DynamoService) UpdateItem(
 	ctx context.Context,
 	tableName string,
@@ -107,28 +106,39 @@ func (ds *DynamoService) UpdateItem(
 	expressionAttributeNames map[string]string,
 ) (map[string]types.AttributeValue, error) {
 
-	log.Printf("Starting UpdateItem for table: %s", tableName)
-	log.Printf("Update Expression: %s", updateExpression)
-	log.Printf("Key: %+v", key)
-	log.Printf("ExpressionAttributeValues: %+v", expressionAttributeValues)
-	log.Printf("ExpressionAttributeNames: %+v", expressionAttributeNames)
+	log.Printf("🔄 Starting UpdateItem for table: %s", tableName)
+	log.Printf("📝 Update Expression: %s", updateExpression)
+	log.Printf("🔑 Key: %+v", key)
+	log.Printf("📌 ExpressionAttributeValues: %+v", expressionAttributeValues)
+	log.Printf("🏷️ ExpressionAttributeNames: %+v", expressionAttributeNames)
 
 	// Ensure key is not empty
 	if len(key) == 0 {
-		log.Println("Update failed: key cannot be empty")
+		log.Println("❌ Update failed: key cannot be empty")
 		return nil, errors.New("update failed: key cannot be empty")
 	}
 
 	// Ensure updateExpression is not empty
 	if updateExpression == "" {
-		log.Println("Update failed: updateExpression cannot be empty")
+		log.Println("❌ Update failed: updateExpression cannot be empty")
 		return nil, errors.New("update failed: updateExpression cannot be empty")
 	}
 
-	// Ensure expressionAttributeValues are not empty if needed
-	if len(expressionAttributeValues) == 0 && updateExpression != "REMOVE pings[0]" {
-		log.Println("Update failed: expressionAttributeValues cannot be empty")
+	// 🚀 Dynamically handle `REMOVE` expressions
+	isRemoveOperation := len(expressionAttributeValues) == 0 &&
+		(len(expressionAttributeNames) > 0 || updateExpression[:6] == "REMOVE")
+
+	if len(expressionAttributeValues) == 0 && !isRemoveOperation {
+		log.Println("❌ Update failed: expressionAttributeValues cannot be empty (except for REMOVE)")
 		return nil, errors.New("update failed: expressionAttributeValues cannot be empty")
+	}
+
+	// Ensure `expressionAttributeValues` is nil if not required
+	var expAttrValues map[string]types.AttributeValue
+	if len(expressionAttributeValues) > 0 {
+		expAttrValues = expressionAttributeValues
+	} else {
+		expAttrValues = nil // Set to nil for REMOVE expressions
 	}
 
 	// Construct the update input
@@ -136,27 +146,27 @@ func (ds *DynamoService) UpdateItem(
 		TableName:                 &tableName,
 		Key:                       key,
 		UpdateExpression:          &updateExpression,
-		ExpressionAttributeValues: expressionAttributeValues,
+		ExpressionAttributeValues: expAttrValues,
 		ExpressionAttributeNames:  expressionAttributeNames,
 		ReturnValues:              types.ReturnValueAllNew,
 	}
 
-	log.Printf("Executing UpdateItem for table '%s' with input: %+v", tableName, updateInput)
+	log.Printf("🚀 Executing UpdateItem for table '%s' with input: %+v", tableName, updateInput)
 
 	// Execute the update operation
 	output, err := ds.Client.UpdateItem(ctx, updateInput)
 	if err != nil {
-		log.Printf("Failed to update item in table '%s': %v", tableName, err)
+		log.Printf("❌ Failed to update item in table '%s': %v", tableName, err)
 		return nil, fmt.Errorf("failed to update item in table '%s': %w", tableName, err)
 	}
 
-	// Check if attributes are returned
+	// ✅ Ensure attributes are returned
 	if output.Attributes == nil {
-		log.Printf("Update executed, but no attributes were returned for table '%s'", tableName)
-		return nil, nil
+		log.Printf("⚠️ Update executed, but no attributes were returned for table '%s'", tableName)
+		return map[string]types.AttributeValue{}, nil // Return empty map instead of nil
 	}
 
-	log.Printf("Successfully updated item in table '%s', Updated Attributes: %+v", tableName, output.Attributes)
+	log.Printf("✅ Successfully updated item in table '%s', Updated Attributes: %+v", tableName, output.Attributes)
 	return output.Attributes, nil
 }
 

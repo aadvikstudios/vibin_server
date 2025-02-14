@@ -261,7 +261,6 @@ func (as *ActionService) AddToList(ctx context.Context, userProfileEmail, attrib
 
 	return nil
 }
-
 func (as *ActionService) RemoveFromList(ctx context.Context, userProfileEmail, attribute, emailIdToRemove string) error {
 	log.Printf("🚀 Initiating removal: userProfileEmail=%s, attribute=%s, emailIdToRemove=%s", userProfileEmail, attribute, emailIdToRemove)
 
@@ -305,14 +304,21 @@ func (as *ActionService) RemoveFromList(ctx context.Context, userProfileEmail, a
 		return fmt.Errorf("email '%s' not found in list '%s'", emailIdToRemove, attribute)
 	}
 
-	// Construct REMOVE expression
-	updateExpression := fmt.Sprintf("REMOVE %s[%d]", attribute, itemIndex)
+	// Construct REMOVE expression with alias for attribute name
+	attributeAlias := "#" + attribute
+	updateExpression := fmt.Sprintf("REMOVE %s[%d]", attributeAlias, itemIndex)
+	expressionAttributeNames := map[string]string{
+		attributeAlias: attribute,
+	}
+
 	log.Printf("➡ Constructed update expression: %s", updateExpression)
 
 	// Perform update operation
 	log.Printf("➡ Removing '%s' from list '%s' in DynamoDB", emailIdToRemove, attribute)
 	_, err = as.Dynamo.UpdateItem(ctx, "UserProfiles", updateExpression,
-		map[string]types.AttributeValue{"emailId": &types.AttributeValueMemberS{Value: userProfileEmail}}, nil, nil,
+		map[string]types.AttributeValue{"emailId": &types.AttributeValueMemberS{Value: userProfileEmail}},
+		nil, // No ExpressionAttributeValues needed for REMOVE
+		expressionAttributeNames,
 	)
 
 	if err != nil {
