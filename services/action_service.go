@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
@@ -191,6 +192,8 @@ func (as *ActionService) ExtractName(profile map[string]types.AttributeValue) st
 
 // CreateMatch creates a match entry for two users
 func (as *ActionService) createMatch(ctx context.Context, emailId, targetEmailId, matchID string) error {
+	log.Printf("🚀 Creating match: matchID=%s, emailId=%s, targetEmailId=%s", matchID, emailId, targetEmailId)
+
 	// Match entry for `emailId` (stores `targetEmailId`)
 	matchEntryA := map[string]types.AttributeValue{
 		"matchId": &types.AttributeValueMemberS{Value: matchID},
@@ -204,13 +207,21 @@ func (as *ActionService) createMatch(ctx context.Context, emailId, targetEmailId
 	}
 
 	// Add match entry for both users
+	log.Printf("➡ Adding match entry for %s in matches list", emailId)
 	if err := as.AddToList(ctx, emailId, "matches", &types.AttributeValueMemberM{Value: matchEntryA}); err != nil {
+		log.Printf("❌ Error adding match for %s: %v", emailId, err)
 		return fmt.Errorf("failed to add match for %s: %w", emailId, err)
 	}
+	log.Printf("✅ Successfully added match for %s", emailId)
+
+	log.Printf("➡ Adding match entry for %s in matches list", targetEmailId)
 	if err := as.AddToList(ctx, targetEmailId, "matches", &types.AttributeValueMemberM{Value: matchEntryB}); err != nil {
+		log.Printf("❌ Error adding match for %s: %v", targetEmailId, err)
 		return fmt.Errorf("failed to add match for %s: %w", targetEmailId, err)
 	}
+	log.Printf("✅ Successfully added match for %s", targetEmailId)
 
+	log.Println("🎉 Match creation successful")
 	return nil
 }
 
