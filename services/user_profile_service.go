@@ -56,26 +56,26 @@ func (ups *UserProfileService) GetUserProfileByEmail(ctx context.Context, emailI
 	profile, err := ups.GetUserProfileByEmailWithoutDistance(ctx, emailID)
 	if err != nil || profile == nil {
 		log.Printf("Error fetching profile: %v\n", err)
-		return nil, fmt.Errorf("failed to fetch profile: %w", err)
+		return nil, fmt.Errorf("failed to fetch profile: %w", err) // 🚨 Possible issue
 	}
 
 	// If no targetEmailID is provided, return only the profile
 	if targetEmailID == nil || *targetEmailID == "" {
 		log.Printf("Returning profile without distance calculation (no target email provided).")
-		return profile, nil
+		return profile, nil // ✅ Should return profile without distance
 	}
 
 	// Fetch the target profile for distance calculation
 	targetProfile, err := ups.GetUserProfileByEmailWithoutDistance(ctx, *targetEmailID)
 	if err != nil || targetProfile == nil {
 		log.Printf("Error fetching target profile: %v\n", err)
-		return nil, fmt.Errorf("failed to fetch target profile: %w", err)
+		return nil, fmt.Errorf("failed to fetch target profile: %w", err) // 🚨 Possible issue
 	}
 
 	// Ensure both profiles have valid latitude and longitude
 	if profile.Latitude == 0 || profile.Longitude == 0 || targetProfile.Latitude == 0 || targetProfile.Longitude == 0 {
 		log.Printf("⚠️ One or both profiles missing latitude/longitude, skipping distance calculation")
-		return profile, nil // Return the profile without distance if lat/lon is missing
+		return profile, nil // ✅ Return profile without distance if lat/lon is missing
 	}
 
 	// Calculate distance between the two users
