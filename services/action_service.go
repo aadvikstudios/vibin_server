@@ -261,15 +261,6 @@ func (as *ActionService) AddToList(ctx context.Context, userProfileEmail, attrib
 
 	return nil
 }
-package main
-
-import (
-	"context"
-	"fmt"
-	"log"
-
-	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
-)
 
 func (as *ActionService) RemoveFromList(ctx context.Context, userProfileEmail, attribute, emailIdToRemove string) error {
 	log.Printf("🚀 Initiating removal: userProfileEmail=%s, attribute=%s, emailIdToRemove=%s", userProfileEmail, attribute, emailIdToRemove)
@@ -332,7 +323,6 @@ func (as *ActionService) RemoveFromList(ctx context.Context, userProfileEmail, a
 	log.Printf("✅ Successfully removed '%s' from list '%s'", emailIdToRemove, attribute)
 	return nil
 }
-
 
 func (as *ActionService) RemoveObjectFromList(ctx context.Context, userProfileEmail, attribute, field, targetValue string) error {
 	profile, err := as.GetUserProfile(ctx, userProfileEmail)
