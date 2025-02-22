@@ -138,7 +138,7 @@ func (c *UserProfileController) DeleteUserProfile(w http.ResponseWriter, r *http
 	})
 }
 
-// CheckUserHandleAvailability checks if the given user handle is unique
+// CheckUserHandleAvailability checks if the given user handle is unique using the GSI
 func (c *UserProfileController) CheckUserHandleAvailability(w http.ResponseWriter, r *http.Request) {
 	// Extract userhandle from query params
 	userHandle := r.URL.Query().Get("userhandle")
@@ -147,19 +147,24 @@ func (c *UserProfileController) CheckUserHandleAvailability(w http.ResponseWrite
 		return
 	}
 
+	log.Printf("🔍 Checking availability for userhandle: %s", userHandle)
+
 	// Call service to check uniqueness
 	isAvailable, err := c.UserProfileService.IsUserHandleAvailable(context.TODO(), userHandle)
 	if err != nil {
+		log.Printf("❌ Error checking userhandle: %v", err)
 		http.Error(w, "Error checking userhandle", http.StatusInternalServerError)
 		return
 	}
 
 	// Respond based on availability
 	if !isAvailable {
+		log.Printf("❌ Userhandle %s is already taken.", userHandle)
 		http.Error(w, "Userhandle is already taken", http.StatusConflict) // 409 Conflict
 		return
 	}
 
+	log.Printf("✅ Userhandle %s is available.", userHandle)
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"message": "Userhandle is available",
 	})

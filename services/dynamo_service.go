@@ -278,3 +278,33 @@ func (ds *DynamoService) BatchWriteItems(
 
 	return nil
 }
+
+// QueryItemsWithIndex queries items from DynamoDB using a Global Secondary Index (GSI)
+func (ds *DynamoService) QueryItemsWithIndex(
+	ctx context.Context,
+	tableName string,
+	indexName string,
+	keyConditionExpression string,
+	expressionAttributeValues map[string]types.AttributeValue,
+	expressionAttributeNames map[string]string,
+	limit int32,
+) ([]map[string]types.AttributeValue, error) {
+
+	log.Printf("🔍 Querying GSI: %s in table: %s", indexName, tableName)
+
+	output, err := ds.Client.Query(ctx, &dynamodb.QueryInput{
+		TableName:                 &tableName,
+		IndexName:                 &indexName, // ✅ Specify GSI name
+		KeyConditionExpression:    &keyConditionExpression,
+		ExpressionAttributeValues: expressionAttributeValues,
+		ExpressionAttributeNames:  expressionAttributeNames,
+		Limit:                     &limit,
+	})
+	if err != nil {
+		log.Printf("❌ Error querying GSI: %v", err)
+		return nil, fmt.Errorf("failed to query GSI '%s': %w", indexName, err)
+	}
+
+	log.Printf("✅ Query successful. Retrieved %d items.", len(output.Items))
+	return output.Items, nil
+}
