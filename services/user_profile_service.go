@@ -167,26 +167,3 @@ func (ups *UserProfileService) DeleteUserProfile(ctx context.Context, userID str
 	}
 	return ups.Dynamo.DeleteItem(ctx, models.UserProfilesTable, key)
 }
-
-// ClearUserInteractions removes `liked[]`, `notLiked[]`, `pings[]`, and `matches[]` from a user profile
-func (ups *UserProfileService) ClearUserInteractions(emailId string) error {
-	log.Printf("🔄 Clearing interactions for user: %s", emailId)
-
-	// Define the REMOVE update expression
-	updateExpression := "REMOVE liked, notLiked, pings, matches"
-
-	// Prepare key for the update operation
-	key := map[string]types.AttributeValue{
-		"emailId": &types.AttributeValueMemberS{Value: emailId},
-	}
-
-	// Call the DynamoDB service method
-	_, err := ups.Dynamo.UpdateItem(context.TODO(), "UserProfiles", updateExpression, key, nil, nil)
-	if err != nil {
-		log.Printf("❌ Error clearing interactions for %s: %v", emailId, err)
-		return fmt.Errorf("failed to clear user interactions: %w", err)
-	}
-
-	log.Printf("✅ Successfully cleared interactions for user: %s", emailId)
-	return nil
-}

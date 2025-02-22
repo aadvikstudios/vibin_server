@@ -306,3 +306,46 @@ func (as *MatchService) GetAllUserEmails(ctx context.Context) ([]string, error) 
 
 	return emailIDs, nil
 }
+
+// ClearUserInteractionsForUser removes `liked[]`, `notLiked[]`, `pings[]`, and `matches[]` from a user profile
+func (as *MatchService) ClearUserInteractionsForUser(emailId string) error {
+	log.Printf("🔄 Clearing interactions for user: %s", emailId)
+
+	// Define the REMOVE update expression
+	updateExpression := "REMOVE liked, notLiked, pings, matches"
+
+	// Prepare key for the update operation
+	key := map[string]types.AttributeValue{
+		"emailId": &types.AttributeValueMemberS{Value: emailId},
+	}
+
+	// Call the DynamoDB service method
+	_, err := as.Dynamo.UpdateItem(context.TODO(), models.UserProfilesTable, updateExpression, key, nil, nil)
+	if err != nil {
+		log.Printf("❌ Error clearing interactions for %s: %v", emailId, err)
+		return fmt.Errorf("failed to clear user interactions: %w", err)
+	}
+
+	log.Printf("✅ Successfully cleared interactions for user: %s", emailId)
+	return nil
+}
+
+// ClearInteractionsForAllUsers fetches all users and clears their interactions
+func (as *MatchService) ClearInteractionsForAllUsers(ctx context.Context) (string, error) {
+	// Fetch all user email IDs
+	emailIDs, err := as.GetAllUserEmails(ctx)
+	if err != nil {
+		log.Printf("❌ Failed to fetch user emails: %v", err)
+		return "", fmt.Errorf("failed to fetch user emails: %w", err)
+	}
+
+	// Iterate over each email and clear their interactions
+	for _, emailID := range emailIDs {
+		err := as.ClearUserInteractionsForUser(emailID)
+		if err != nil {
+			log.Printf("⚠️ Error clearing interactions for user %s: %v", emailID, err)
+		}
+	}
+
+	return "✅ Data cleared for all the user email IDs", nil
+}

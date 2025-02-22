@@ -114,19 +114,19 @@ func (ac *MatchController) GetNewLikes(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// GetAllUserEmails fetches all user email IDs from the database
-func (ac *MatchController) GetAllUserEmails(w http.ResponseWriter, r *http.Request) {
-	// Fetch all user email IDs
-	emailIDs, err := ac.MatchService.GetAllUserEmails(r.Context())
+// ClearAllInteractionsForAllUsers clears interactions (liked, notLiked, pings, matches) for all users
+func (ac *MatchController) ClearAllInteractionsForAllUsers(w http.ResponseWriter, r *http.Request) {
+	// Call MatchService to clear all interactions
+	message, err := ac.MatchService.ClearInteractionsForAllUsers(r.Context())
 	if err != nil {
-		log.Printf("❌ Error fetching user emails: %v", err)
-		http.Error(w, "Failed to fetch user emails", http.StatusInternalServerError)
+		log.Printf("❌ Error clearing user interactions: %v", err)
+		http.Error(w, "Failed to clear user interactions", http.StatusInternalServerError)
 		return
 	}
 
-	// Send response
+	// Send success response
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"emailIds": emailIDs,
+	json.NewEncoder(w).Encode(map[string]string{
+		"message": message,
 	})
 }

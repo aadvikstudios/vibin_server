@@ -137,33 +137,3 @@ func (c *UserProfileController) DeleteUserProfile(w http.ResponseWriter, r *http
 		"message": "Profile deleted successfully",
 	})
 }
-
-func (c *UserProfileController) ClearUserInteractions(w http.ResponseWriter, r *http.Request) {
-	var request struct {
-		EmailId string `json:"emailId"`
-	}
-
-	// Decode the request body
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		http.Error(w, "Invalid request payload", http.StatusBadRequest)
-		return
-	}
-
-	// Ensure emailId is provided
-	if request.EmailId == "" {
-		http.Error(w, "Missing required field: emailId", http.StatusBadRequest)
-		return
-	}
-
-	// Call service layer to clear interactions
-	err := c.UserProfileService.ClearUserInteractions(request.EmailId)
-	if err != nil {
-		log.Printf("❌ Failed to clear interactions for %s: %v", request.EmailId, err)
-		http.Error(w, "Failed to clear user interactions", http.StatusInternalServerError)
-		return
-	}
-
-	log.Printf("✅ Successfully cleared interactions for user: %s", request.EmailId)
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"message": "User interactions cleared successfully"}`))
-}

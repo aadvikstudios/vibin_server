@@ -20,6 +20,6 @@ func RegisterMatchRoutes(r *mux.Router, matchService *services.MatchService) {
 	matchRouter.HandleFunc("", controller.GetFilteredProfiles).Methods("GET") // Handles /api/match with query parameters
 	matchRouter.HandleFunc("/newLikes", controller.GetNewLikes).Methods("GET")
 	matchRouter.HandleFunc("/pings", controller.GetPings).Methods("GET")
-	matchRouter.HandleFunc("/emails", controller.GetAllUserEmails).Methods("GET")
+	matchRouter.HandleFunc("/clear-all-interactions", controller.ClearAllInteractionsForAllUsers).Methods("POST")
 
 }
