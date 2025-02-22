@@ -137,3 +137,30 @@ func (c *UserProfileController) DeleteUserProfile(w http.ResponseWriter, r *http
 		"message": "Profile deleted successfully",
 	})
 }
+
+// CheckUserHandleAvailability checks if the given user handle is unique
+func (c *UserProfileController) CheckUserHandleAvailability(w http.ResponseWriter, r *http.Request) {
+	// Extract userhandle from query params
+	userHandle := r.URL.Query().Get("userhandle")
+	if userHandle == "" {
+		http.Error(w, "Missing required field: userhandle", http.StatusBadRequest)
+		return
+	}
+
+	// Call service to check uniqueness
+	isAvailable, err := c.UserProfileService.IsUserHandleAvailable(context.TODO(), userHandle)
+	if err != nil {
+		http.Error(w, "Error checking userhandle", http.StatusInternalServerError)
+		return
+	}
+
+	// Respond based on availability
+	if !isAvailable {
+		http.Error(w, "Userhandle is already taken", http.StatusConflict) // 409 Conflict
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message": "Userhandle is available",
+	})
+}

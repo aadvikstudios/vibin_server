@@ -6,6 +6,8 @@ type UserProfile struct {
 	EmailIDVerified     bool              `dynamodbav:"emailIdVerified,omitempty" json:"emailIdVerified,omitempty"`         // Email verification status
 	PhoneNumber         string            `dynamodbav:"phoneNumber,omitempty" json:"phoneNumber,omitempty"`                 // User's phone number
 	Name                string            `dynamodbav:"name,omitempty" json:"name,omitempty"`                               // Full name of the user
+	UserHandle          string            `dynamodbav:"userhandle,omitempty" json:"userhandle,omitempty"`                   // Unique handle for user anonymity & chat
+	HideName            bool              `dynamodbav:"hideName,omitempty" json:"hideName,omitempty"`                       // Flag to hide real name on profile
 	Bio                 string            `dynamodbav:"bio,omitempty" json:"bio,omitempty"`                                 // Short biography
 	Desires             []string          `dynamodbav:"desires,omitempty" json:"desires,omitempty"`                         // User's desires
 	DOB                 string            `dynamodbav:"dob,omitempty" json:"dob,omitempty"`                                 // Date of Birth
@@ -17,9 +19,9 @@ type UserProfile struct {
 	LookingFor          string            `dynamodbav:"lookingFor,omitempty" json:"lookingFor,omitempty"`                   // What the user is looking for
 	Orientation         string            `dynamodbav:"orientation,omitempty" json:"orientation,omitempty"`                 // User's orientation
 	ShowGenderOnProfile bool              `dynamodbav:"showGenderOnProfile,omitempty" json:"showGenderOnProfile,omitempty"` // Show gender on profile or not
-	Photos              []string          `dynamodbav:"photos,omitempty" json:"photos,omitempty"`
-	DistanceBetween     float64           `dynamodbav:"distanceBetween,omitempty" json:"distanceBetween,omitempty"`
-	Questionnaire       map[string]string `dynamodbav:"questionnaire,omitempty" json:"questionnaire,omitempty"` // Questionnaire responses
+	Photos              []string          `dynamodbav:"photos,omitempty" json:"photos,omitempty"`                           // User photos
+	DistanceBetween     float64           `dynamodbav:"distanceBetween,omitempty" json:"distanceBetween,omitempty"`         // Distance from matched user
+	Questionnaire       map[string]string `dynamodbav:"questionnaire,omitempty" json:"questionnaire,omitempty"`             // Questionnaire responses
 }
 
 // UserProfilesTable is the DynamoDB table name for user profiles
