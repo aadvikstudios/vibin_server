@@ -275,36 +275,25 @@ func (as *MatchService) GetLastMessage(ctx context.Context, matchID, emailId str
 	return lastMessage, isUnread, senderId
 }
 
-package services
-
-import (
-	"context"
-	"fmt"
-	"log"
-
-	"vibin_server/models"
-
-	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
-	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
-)
-
-// GetAllUserEmails retrieves all user email IDs from DynamoDB
 func (as *MatchService) GetAllUserEmails(ctx context.Context) ([]string, error) {
 	var emailIDs []string
 
 	// Define projection to only fetch "emailId"
 	projectionExpression := "emailId"
 
+	// Store table name in a variable (fix for string constant error)
+	tableName := models.UserProfilesTable
+
 	// Perform a full scan but only select "emailId"
 	scanInput := &dynamodb.ScanInput{
-		TableName:            &models.UserProfilesTable,
+		TableName:            &tableName, // ✅ Now this is a valid pointer
 		ProjectionExpression: &projectionExpression,
 	}
 
 	// Execute the scan operation
 	output, err := as.Dynamo.Client.Scan(ctx, scanInput)
 	if err != nil {
-		log.Printf("❌ Failed to scan table '%s': %v", models.UserProfilesTable, err)
+		log.Printf("❌ Failed to scan table '%s': %v", tableName, err)
 		return nil, fmt.Errorf("failed to scan user profiles: %w", err)
 	}
 
