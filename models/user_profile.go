@@ -7,6 +7,7 @@ type UserProfile struct {
 	PhoneNumber         string            `dynamodbav:"phoneNumber,omitempty" json:"phoneNumber,omitempty"`                 // User's phone number
 	Name                string            `dynamodbav:"name,omitempty" json:"name,omitempty"`                               // Full name of the user
 	UserHandle          string            `dynamodbav:"userhandle,omitempty" json:"userhandle,omitempty"`                   // Unique handle for user anonymity & chat
+	UserName            string            `dynamodbav:"username,omitempty" json:"username,omitempty"`                       // Unique handle for user anonymity & chat
 	HideName            bool              `dynamodbav:"hideName,omitempty" json:"hideName,omitempty"`                       // Flag to hide real name on profile
 	Bio                 string            `dynamodbav:"bio,omitempty" json:"bio,omitempty"`                                 // Short biography
 	Desires             []string          `dynamodbav:"desires,omitempty" json:"desires,omitempty"`                         // User's desires
