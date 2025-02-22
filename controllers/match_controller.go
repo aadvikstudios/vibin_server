@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"vibin_server/services"
 )
@@ -110,5 +111,22 @@ func (ac *MatchController) GetNewLikes(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"likes": likes,
+	})
+}
+
+// GetAllUserEmails fetches all user email IDs from the database
+func (ac *MatchController) GetAllUserEmails(w http.ResponseWriter, r *http.Request) {
+	// Fetch all user email IDs
+	emailIDs, err := ac.MatchService.GetAllUserEmails(r.Context())
+	if err != nil {
+		log.Printf("❌ Error fetching user emails: %v", err)
+		http.Error(w, "Failed to fetch user emails", http.StatusInternalServerError)
+		return
+	}
+
+	// Send response
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"emailIds": emailIDs,
 	})
 }

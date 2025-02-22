@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"log"
 	"math"
 	"strconv"
 	"vibin_server/models"
@@ -272,4 +273,47 @@ func (as *MatchService) GetLastMessage(ctx context.Context, matchID, emailId str
 	isUnread := utils.ExtractBool(messageItem, "isUnread") && senderId != emailId // Only unread if sender is not the user
 
 	return lastMessage, isUnread, senderId
+}
+
+package services
+
+import (
+	"context"
+	"fmt"
+	"log"
+
+	"vibin_server/models"
+
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+)
+
+// GetAllUserEmails retrieves all user email IDs from DynamoDB
+func (as *MatchService) GetAllUserEmails(ctx context.Context) ([]string, error) {
+	var emailIDs []string
+
+	// Define projection to only fetch "emailId"
+	projectionExpression := "emailId"
+
+	// Perform a full scan but only select "emailId"
+	scanInput := &dynamodb.ScanInput{
+		TableName:            &models.UserProfilesTable,
+		ProjectionExpression: &projectionExpression,
+	}
+
+	// Execute the scan operation
+	output, err := as.Dynamo.Client.Scan(ctx, scanInput)
+	if err != nil {
+		log.Printf("❌ Failed to scan table '%s': %v", models.UserProfilesTable, err)
+		return nil, fmt.Errorf("failed to scan user profiles: %w", err)
+	}
+
+	// Extract email IDs from the result
+	for _, item := range output.Items {
+		if emailAttr, exists := item["emailId"]; exists {
+			emailIDs = append(emailIDs, emailAttr.(*types.AttributeValueMemberS).Value)
+		}
+	}
+
+	return emailIDs, nil
 }
