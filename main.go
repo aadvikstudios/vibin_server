@@ -26,6 +26,7 @@ func main() {
 	actionService := &services.ActionService{Dynamo: dynamoService}
 	chatService := &services.ChatService{Dynamo: dynamoService}
 	matchService := &services.MatchService{Dynamo: dynamoService}
+	inviteService := &services.InviteService{Dynamo: dynamoService} // ✅ Added Invite Service
 
 	// Set up the server port
 	port := os.Getenv("PORT")
@@ -54,6 +55,7 @@ func main() {
 	routes.RegisterActionRoutes(r, actionService)
 	routes.RegisterChatRoutes(r, chatService)
 	routes.RegisterMatchRoutes(r, matchService)
+	routes.RegisterPendingInviteRoutes(r, inviteService) // ✅ Added Invite Routes
 	routes.RegisterS3Routes(r)
 
 	r.HandleFunc("/privacy-policy", routes.PrivacyPolicyHandler).Methods("GET")
