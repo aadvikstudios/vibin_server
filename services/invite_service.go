@@ -17,20 +17,21 @@ type InviteService struct {
 	Dynamo *DynamoService
 }
 
-// **1️⃣ Create an Invite (Method)**
-func (s *InviteService) CreateInvite(ctx context.Context, inviterID, invitedUserID, approverID, matchID string) error {
+// CreateInvite stores a new invite in DynamoDB
+func (s *InviteService) CreateInvite(ctx context.Context, inviterID, invitedUserID, approverID, inviteType, matchID string) error {
 	createdAt := time.Now().UTC().Format(time.RFC3339)
 
 	invite := models.PendingInvite{
-		ApproverID:    approverID,
-		CreatedAt:     createdAt,
-		InviterID:     inviterID,
-		InvitedUserID: invitedUserID,
+		ApproverID:    approverID,    // User who approves the invite
+		CreatedAt:     createdAt,     // Timestamp for sorting
+		InviterID:     inviterID,     // User who sent the invite
+		InvitedUserID: invitedUserID, // User being invited
 		MatchID:       matchID,
-		Status:        models.InviteStatusPending, // ✅ Using constant
+		InviteType:    inviteType,
+		Status:        models.InviteStatusPending, // ✅ "pending" status
 	}
 
-	return s.Dynamo.PutItem(ctx, models.PendingInvite{}.TableName(), invite) // ✅ Using TableName()
+	return s.Dynamo.PutItem(ctx, models.PendingInvite{}.TableName(), invite)
 }
 
 // **2️⃣ Get Pending Invites (Method)**

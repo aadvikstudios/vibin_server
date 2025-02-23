@@ -1,23 +1,26 @@
 package models
 
-// PendingInvite represents an invite in the PendingInvites table.
-type PendingInvite struct {
-	ApproverID    string `dynamodbav:"approverId"`    // PK (Email of the user who needs to approve)
-	CreatedAt     string `dynamodbav:"createdAt"`     // SK (Timestamp for sorting invites)
-	InviterID     string `dynamodbav:"inviterId"`     // GSI (Email of the user who initiated the invite)
-	InvitedUserID string `dynamodbav:"invitedUserId"` // Email of the invited user
-	MatchID       string `dynamodbav:"matchId"`       // Chat ID (one-to-one or group)
-	Status        string `dynamodbav:"status"`        // Status: "pending", "accepted", "declined"
-}
-
-// TableName returns the name of the DynamoDB table
-func (PendingInvite) TableName() string {
-	return "PendingInvites"
-}
-
-// Possible Invite Statuses
 const (
 	InviteStatusPending  = "pending"
 	InviteStatusAccepted = "accepted"
 	InviteStatusDeclined = "declined"
+
+	InviteTypeOneToOne = "one-to-one" // 1-on-1 chat
+	InviteTypeGroup    = "group"      // Group chat
 )
+
+// PendingInvite represents an invite in DynamoDB
+type PendingInvite struct {
+	ApproverID    string `json:"approverId" dynamodbav:"approverId"`       // PK (User B approving the invite)
+	CreatedAt     string `json:"createdAt" dynamodbav:"createdAt"`         // SK (Timestamp for sorting)
+	InviterID     string `json:"inviterId" dynamodbav:"inviterId"`         // User A who initiated the invite
+	InvitedUserID string `json:"invitedUserId" dynamodbav:"invitedUserId"` // User C being invited
+	MatchID       string `json:"matchId" dynamodbav:"matchId"`             // Generated Chat ID (One-to-One or Group)
+	InviteType    string `json:"inviteType" dynamodbav:"inviteType"`       // "one-to-one" or "group"
+	Status        string `json:"status" dynamodbav:"status"`               // "pending", "accepted", "declined"
+}
+
+// TableName returns the DynamoDB table name
+func (PendingInvite) TableName() string {
+	return "PendingInvites"
+}
