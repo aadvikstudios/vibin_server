@@ -192,6 +192,7 @@ func (ups *UserProfileService) IsUserHandleAvailable(ctx context.Context, userHa
 	item, err := ups.Dynamo.GetItem(ctx, models.UserProfilesTable, key)
 	if err != nil {
 		// Handle "not found" case without treating it as an error
+		fmt.Println("erorr is ", err)
 		var notFoundErr *types.ResourceNotFoundException
 		if errors.As(err, &notFoundErr) {
 			log.Printf("✅ Userhandle '%s' is available (not found in DynamoDB).", userHandle)
