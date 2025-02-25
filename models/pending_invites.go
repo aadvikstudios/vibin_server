@@ -11,5 +11,14 @@ type PendingInvite struct {
 	Status        string `dynamodbav:"status" json:"status"`               // "pending", "accepted", "declined"
 }
 
-// PendingInvitesTable is the DynamoDB table name for pending invites
-const PendingInvitesTable = "PendingInvites"
+// Invite Status Constants
+const (
+	InviteStatusPending  = "pending"
+	InviteStatusAccepted = "accepted"
+	InviteStatusDeclined = "declined"
+)
+
+// TableName returns the DynamoDB table name for the PendingInvite model
+func (PendingInvite) TableName() string {
+	return "PendingInvites" // Ensure this matches the table name in DynamoDB
+}
