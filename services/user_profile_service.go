@@ -5,12 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"vibin_server/models"
 
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/service/dynamodb"
 )
 
 type UserProfileService struct {
@@ -191,16 +190,8 @@ func (ups *UserProfileService) IsUserHandleAvailable(ctx context.Context, userHa
 	// Fetch item using GetItem
 	item, err := ups.Dynamo.GetItem(ctx, models.UserProfilesTable, key)
 	if err != nil {
-		// Handle "not found" case without treating it as an error
-		fmt.Println("erorr is ", err)
-		var notFoundErr *types.ResourceNotFoundException
-		if errors.As(err, &notFoundErr) {
-			log.Printf("✅ Userhandle '%s' is available (not found in DynamoDB).", userHandle)
-			return true, nil
-		}
-
-		// Check if it's an AWS DynamoDB error indicating a missing item
-		if awsErr, ok := err.(awserr.Error); ok && awsErr.Code() == dynamodb.ErrCodeResourceNotFoundException {
+		// ✅ Check if error contains "item not found"
+		if strings.Contains(err.Error(), "item not found") {
 			log.Printf("✅ Userhandle '%s' is available (not found in DynamoDB).", userHandle)
 			return true, nil
 		}
