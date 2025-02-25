@@ -41,25 +41,27 @@ func (s *InteractionService) SaveInteraction(ctx context.Context, senderHandle, 
 }
 
 // ✅ Optimized `HasUserLiked` to use `senderHandle-index`
-func (s *InteractionService) HasUserLiked(ctx context.Context, senderHandle, receiverHandle string) (bool, error) {
-	log.Printf("🔍 Checking if %s has liked %s", senderHandle, receiverHandle)
+// ✅ Corrected Query Condition for GSI
+func (s *InteractionService) HasUserLiked(ctx context.Context, receiverHandle, senderHandle string) (bool, error) {
+	log.Printf("🔍 Checking if %s has liked %s", receiverHandle, senderHandle)
 
-	// ✅ Query using GSI (`senderHandle-index`) to fetch all likes sent by `senderHandle`
+	// ✅ Use `senderHandle` as partition key for GSI query
 	keyCondition := "senderHandle = :sender AND #type = :type"
 	expressionValues := map[string]types.AttributeValue{
-		":sender": &types.AttributeValueMemberS{Value: senderHandle},
-		":type":   &types.AttributeValueMemberS{Value: "like"},
+		":sender": &types.AttributeValueMemberS{Value: receiverHandle}, // ✅ Use as partition key
+		":type":   &types.AttributeValueMemberS{Value: "like"},         // ✅ Filter by type
 	}
 	expressionNames := map[string]string{"#type": "type"}
 
-	// ✅ Query DynamoDB using the GSI
-	items, err := s.Dynamo.QueryItemsWithIndex(ctx, models.InteractionsTable, models.SenderHandleIndex, keyCondition, expressionValues, expressionNames, 100)
+	// ✅ Query the senderHandle-index
+	log.Printf("🔍 Querying GSI: senderHandle-index in table: %s", models.InteractionsTable)
+	items, err := s.Dynamo.QueryItemsWithIndex(ctx, models.InteractionsTable, "senderHandle-index", keyCondition, expressionValues, expressionNames, 1)
 	if err != nil {
-		log.Printf("❌ Error querying likes from senderHandle-index for %s: %v", senderHandle, err)
+		log.Printf("❌ Error querying GSI: %v", err)
 		return false, nil
 	}
 
-	// ✅ Check if receiverHandle exists in the results
+	// ✅ Check if the receiver has liked the sender
 	for _, item := range items {
 		var interaction models.Interaction
 		err := attributevalue.UnmarshalMap(item, &interaction)
@@ -67,13 +69,13 @@ func (s *InteractionService) HasUserLiked(ctx context.Context, senderHandle, rec
 			log.Printf("❌ Error unmarshalling interaction: %v", err)
 			continue
 		}
-		if interaction.ReceiverHandle == receiverHandle {
-			log.Printf("✅ %s has already liked %s", senderHandle, receiverHandle)
+		if interaction.ReceiverHandle == senderHandle {
+			log.Printf("✅ %s has already liked %s", receiverHandle, senderHandle)
 			return true, nil
 		}
 	}
 
-	log.Printf("⚠️ %s has NOT liked %s", senderHandle, receiverHandle)
+	log.Printf("⚠️ %s has NOT liked %s", receiverHandle, senderHandle)
 	return false, nil
 }
 
