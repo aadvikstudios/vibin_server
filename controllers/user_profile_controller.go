@@ -35,23 +35,32 @@ func (c *UserProfileController) CreateUserProfile(w http.ResponseWriter, r *http
 	json.NewEncoder(w).Encode(createdProfile)
 }
 
+// GetUserProfileByEmail fetches a user profile using the email ID from the GSI
 func (c *UserProfileController) GetUserProfileByEmail(w http.ResponseWriter, r *http.Request) {
 	var request struct {
-		EmailID       string  `json:"emailId"`
-		TargetEmailID *string `json:"targetEmailId,omitempty"`
+		EmailID string `json:"emailId"`
 	}
 
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+	// Decode JSON request
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil || request.EmailID == "" {
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
 		return
 	}
 
-	profile, err := c.UserProfileService.GetUserProfileByEmail(context.TODO(), request.EmailID, request.TargetEmailID)
+	// Fetch user profile
+	profile, err := c.UserProfileService.GetUserProfileByEmail(context.TODO(), request.EmailID)
 	if err != nil {
 		http.Error(w, "Failed to fetch profile", http.StatusInternalServerError)
 		return
 	}
 
+	// If profile is not found, return 404
+	if profile == nil {
+		http.Error(w, "Profile not found", http.StatusNotFound)
+		return
+	}
+
+	// Return user profile
 	json.NewEncoder(w).Encode(profile)
 }
 

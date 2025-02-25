@@ -5,9 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"math"
 	"vibin_server/models"
-	"vibin_server/utils"
 
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
@@ -50,26 +48,39 @@ func (ups *UserProfileService) GetUserProfile(ctx context.Context, emailID strin
 	return &profile, nil
 }
 
-// GetUserProfileByEmail retrieves a user profile by email and calculates distance if needed
-func (ups *UserProfileService) GetUserProfileByEmail(ctx context.Context, emailID string, targetEmailID *string) (*models.UserProfile, error) {
-	profile, err := ups.GetUserProfileByEmailWithoutDistance(ctx, emailID)
-	if err != nil || profile == nil {
-		return nil, err
+// GetUserProfileByEmail fetches a user profile based on the email GSI (`emailId-index`)
+func (ups *UserProfileService) GetUserProfileByEmail(ctx context.Context, emailID string) (*models.UserProfile, error) {
+	log.Printf("🔍 Fetching user profile for email: %s", emailID)
+
+	// Define query parameters for the GSI (emailId-index)
+	keyCondition := "emailId = :emailId"
+	expressionAttributeValues := map[string]types.AttributeValue{
+		":emailId": &types.AttributeValueMemberS{Value: emailID},
 	}
 
-	if targetEmailID == nil || *targetEmailID == "" {
-		return profile, nil
+	// Query the GSI (emailId-index)
+	items, err := ups.Dynamo.QueryItemsWithIndex(ctx, models.UserProfilesTable, "emailId-index", keyCondition, expressionAttributeValues, nil, 1)
+	if err != nil {
+		log.Printf("❌ Error querying email index: %v", err)
+		return nil, fmt.Errorf("failed to fetch profile by email: %w", err)
 	}
 
-	targetProfile, err := ups.GetUserProfileByEmailWithoutDistance(ctx, *targetEmailID)
-	if err != nil || targetProfile == nil {
-		return profile, nil
+	// If no profile is found, return nil
+	if len(items) == 0 {
+		log.Printf("❌ No profile found for email: %s", emailID)
+		return nil, nil
 	}
 
-	distance := utils.CalculateDistance(profile.Latitude, profile.Longitude, targetProfile.Latitude, targetProfile.Longitude)
-	profile.DistanceBetween = math.Round(distance*100) / 100
+	// Unmarshal the first result into a UserProfile struct
+	var profile models.UserProfile
+	err = attributevalue.UnmarshalMap(items[0], &profile)
+	if err != nil {
+		log.Printf("❌ Error unmarshalling user profile: %v", err)
+		return nil, fmt.Errorf("failed to unmarshal profile: %w", err)
+	}
 
-	return profile, nil
+	log.Printf("✅ Successfully fetched user profile: %+v", profile)
+	return &profile, nil
 }
 
 // UpdateUserProfile updates an existing user profile
@@ -129,35 +140,35 @@ func (ups *UserProfileService) UpdateUserProfile(ctx context.Context, emailID st
 
 // #[TODO] check if below functions are proper
 // Helper function to fetch a profile by email WITHOUT distance calculation
-func (ups *UserProfileService) GetUserProfileByEmailWithoutDistance(ctx context.Context, emailID string) (*models.UserProfile, error) {
-	log.Printf("Fetching profile by email: %s\n", emailID)
+// func (ups *UserProfileService) GetUserProfileByEmailWithoutDistance(ctx context.Context, emailID string) (*models.UserProfile, error) {
+// 	log.Printf("Fetching profile by email: %s\n", emailID)
 
-	keyCondition := "emailId = :emailId"
-	expressionAttributeValues := map[string]types.AttributeValue{
-		":emailId": &types.AttributeValueMemberS{Value: emailID},
-	}
+// 	keyCondition := "emailId = :emailId"
+// 	expressionAttributeValues := map[string]types.AttributeValue{
+// 		":emailId": &types.AttributeValueMemberS{Value: emailID},
+// 	}
 
-	items, err := ups.Dynamo.QueryItems(ctx, models.UserProfilesTable, keyCondition, expressionAttributeValues, nil, 1)
-	if err != nil {
-		log.Printf("Error querying DynamoDB: %v\n", err)
-		return nil, fmt.Errorf("failed to fetch profile by email: %w", err)
-	}
+// 	items, err := ups.Dynamo.QueryItems(ctx, models.UserProfilesTable, keyCondition, expressionAttributeValues, nil, 1)
+// 	if err != nil {
+// 		log.Printf("Error querying DynamoDB: %v\n", err)
+// 		return nil, fmt.Errorf("failed to fetch profile by email: %w", err)
+// 	}
 
-	if len(items) == 0 {
-		log.Printf("No profile found for email: %s\n", emailID)
-		return nil, nil // No profile found
-	}
+// 	if len(items) == 0 {
+// 		log.Printf("No profile found for email: %s\n", emailID)
+// 		return nil, nil // No profile found
+// 	}
 
-	var profile models.UserProfile
-	err = attributevalue.UnmarshalMap(items[0], &profile)
-	if err != nil {
-		log.Printf("Error unmarshalling DynamoDB item: %v\n", err)
-		return nil, fmt.Errorf("failed to unmarshal profile: %w", err)
-	}
+// 	var profile models.UserProfile
+// 	err = attributevalue.UnmarshalMap(items[0], &profile)
+// 	if err != nil {
+// 		log.Printf("Error unmarshalling DynamoDB item: %v\n", err)
+// 		return nil, fmt.Errorf("failed to unmarshal profile: %w", err)
+// 	}
 
-	log.Printf("Profile fetched successfully: %+v\n", profile)
-	return &profile, nil
-}
+// 	log.Printf("Profile fetched successfully: %+v\n", profile)
+// 	return &profile, nil
+// }
 
 // DeleteUserProfile removes a user profile from DynamoDB
 func (ups *UserProfileService) DeleteUserProfile(ctx context.Context, userID string) error {
