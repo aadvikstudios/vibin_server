@@ -64,7 +64,6 @@ func (c *UserProfileController) GetUserProfileByEmail(w http.ResponseWriter, r *
 	// Return user profile
 	json.NewEncoder(w).Encode(profile)
 }
-
 func (c *UserProfileController) CheckUserHandleAvailability(w http.ResponseWriter, r *http.Request) {
 	// Extract userhandle from query params
 	userHandle := r.URL.Query().Get("userhandle")
@@ -79,7 +78,7 @@ func (c *UserProfileController) CheckUserHandleAvailability(w http.ResponseWrite
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Check if userhandle exists using `GetItem`
+	// Check if userhandle exists
 	isAvailable, err := c.UserProfileService.IsUserHandleAvailable(ctx, userHandle)
 	if err != nil {
 		log.Printf("❌ Internal Server Error while checking userhandle '%s': %v", userHandle, err)

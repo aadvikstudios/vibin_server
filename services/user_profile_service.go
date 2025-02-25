@@ -9,6 +9,8 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/aws/aws-sdk-go/service/dynamodb"
 )
 
 type UserProfileService struct {
@@ -178,30 +180,29 @@ func (ups *UserProfileService) DeleteUserProfile(ctx context.Context, userID str
 	return ups.Dynamo.DeleteItem(ctx, models.UserProfilesTable, key)
 }
 
-// IsUserHandleAvailable checks if a userhandle already exists in DynamoDB.
 func (ups *UserProfileService) IsUserHandleAvailable(ctx context.Context, userHandle string) (bool, error) {
-	log.Printf("🔍 Checking availability of userhandle: %s", userHandle)
+	log.Printf("🔍 Checking availability of userhandle new: %s", userHandle)
 
 	// Define the partition key for lookup
 	key := map[string]types.AttributeValue{
-		"userhandle": &types.AttributeValueMemberS{Value: userHandle}, // ✅ Partition Key
+		"userhandle": &types.AttributeValueMemberS{Value: userHandle},
 	}
 
 	// Fetch item using GetItem
 	item, err := ups.Dynamo.GetItem(ctx, models.UserProfilesTable, key)
 	if err != nil {
-		var notFoundErr *types.ResourceNotFoundException
-		if errors.As(err, &notFoundErr) {
+		// Handle "not found" case without treating it as an error
+		if awsErr, ok := err.(awserr.Error); ok && awsErr.Code() == dynamodb.ErrCodeResourceNotFoundException {
 			log.Printf("✅ Userhandle '%s' is available (not found in DynamoDB).", userHandle)
 			return true, nil
 		}
 
-		// Log unexpected errors
-		log.Printf("❌ Error retrieving userhandle '%s' from DynamoDB: %v", userHandle, err)
-		return false, fmt.Errorf("failed to check userhandle: %w", err)
+		// ❌ Unexpected errors should still be logged
+		log.Printf("❌ Unexpected error retrieving userhandle '%s' from DynamoDB: %v", userHandle, err)
+		return false, err
 	}
 
-	// If item is nil or empty, the userhandle is available
+	// If no item is returned, the userhandle is available
 	if item == nil || len(item) == 0 {
 		log.Printf("✅ Userhandle '%s' is available.", userHandle)
 		return true, nil
