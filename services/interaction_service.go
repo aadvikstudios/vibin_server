@@ -17,21 +17,19 @@ type InteractionService struct {
 	Dynamo *DynamoService
 }
 
-// SaveInteraction saves a like or dislike interaction
+// ✅ SaveInteraction now ensures the correct keys are used for indexing
 func (s *InteractionService) SaveInteraction(ctx context.Context, senderHandle, receiverHandle, interactionType string) error {
-	interactionID := uuid.New().String()
 	createdAt := time.Now().Format(time.RFC3339)
 
 	interaction := models.Interaction{
-		InteractionID:  interactionID,
-		SenderHandle:   senderHandle,
 		ReceiverHandle: receiverHandle,
+		SenderHandle:   senderHandle,
 		Type:           interactionType,
 		Status:         "pending",
 		CreatedAt:      createdAt,
 	}
 
-	// Save the interaction in DynamoDB
+	// ✅ Save the interaction in DynamoDB
 	err := s.Dynamo.PutItem(ctx, models.InteractionsTable, interaction)
 	if err != nil {
 		log.Printf("❌ Failed to save interaction: %v", err)
@@ -42,26 +40,26 @@ func (s *InteractionService) SaveInteraction(ctx context.Context, senderHandle, 
 	return nil
 }
 
-// HasUserLiked checks if the given receiver has liked the sender (i.e., mutual match check)
-func (s *InteractionService) HasUserLiked(ctx context.Context, receiverHandle, senderHandle string) (bool, error) {
-	log.Printf("🔍 Checking if %s has liked %s", receiverHandle, senderHandle)
+// ✅ Optimized `HasUserLiked` to use `senderHandle-index`
+func (s *InteractionService) HasUserLiked(ctx context.Context, senderHandle, receiverHandle string) (bool, error) {
+	log.Printf("🔍 Checking if %s has liked %s", senderHandle, receiverHandle)
 
-	// Query DynamoDB using receiverHandle as partition key
-	keyCondition := "receiverHandle = :receiver AND #type = :type"
+	// ✅ Query using GSI (`senderHandle-index`) to fetch all likes sent by `senderHandle`
+	keyCondition := "senderHandle = :sender AND #type = :type"
 	expressionValues := map[string]types.AttributeValue{
-		":receiver": &types.AttributeValueMemberS{Value: receiverHandle},
-		":type":     &types.AttributeValueMemberS{Value: "like"},
+		":sender": &types.AttributeValueMemberS{Value: senderHandle},
+		":type":   &types.AttributeValueMemberS{Value: "like"},
 	}
 	expressionNames := map[string]string{"#type": "type"}
 
-	// Query interactions table
-	items, err := s.Dynamo.QueryItems(ctx, models.InteractionsTable, keyCondition, expressionValues, expressionNames, 1)
+	// ✅ Query DynamoDB using the GSI
+	items, err := s.Dynamo.QueryItemsWithIndex(ctx, models.InteractionsTable, models.SenderHandleIndex, keyCondition, expressionValues, expressionNames, 100)
 	if err != nil {
-		log.Printf("❌ Error querying likes for %s: %v", receiverHandle, err)
+		log.Printf("❌ Error querying likes from senderHandle-index for %s: %v", senderHandle, err)
 		return false, nil
 	}
 
-	// Check if senderHandle is in the result (has liked the sender)
+	// ✅ Check if receiverHandle exists in the results
 	for _, item := range items {
 		var interaction models.Interaction
 		err := attributevalue.UnmarshalMap(item, &interaction)
@@ -69,28 +67,28 @@ func (s *InteractionService) HasUserLiked(ctx context.Context, receiverHandle, s
 			log.Printf("❌ Error unmarshalling interaction: %v", err)
 			continue
 		}
-		if interaction.SenderHandle == senderHandle {
-			log.Printf("✅ %s has already liked %s", receiverHandle, senderHandle)
+		if interaction.ReceiverHandle == receiverHandle {
+			log.Printf("✅ %s has already liked %s", senderHandle, receiverHandle)
 			return true, nil
 		}
 	}
 
-	log.Printf("⚠️ %s has NOT liked %s", receiverHandle, senderHandle)
+	log.Printf("⚠️ %s has NOT liked %s", senderHandle, receiverHandle)
 	return false, nil
 }
 
-// IsMatch checks if two users have liked each other
+// ✅ Optimized `IsMatch` function to check if both users liked each other
 func (s *InteractionService) IsMatch(ctx context.Context, senderHandle, receiverHandle string) (bool, error) {
 	log.Printf("🔍 Checking match status for %s and %s", senderHandle, receiverHandle)
 
-	// Check if receiver has liked the sender
+	// ✅ Check if receiver has liked the sender
 	hasReceiverLiked, err := s.HasUserLiked(ctx, receiverHandle, senderHandle)
 	if err != nil {
 		log.Printf("❌ Error checking if %s liked %s: %v", receiverHandle, senderHandle, err)
 		return false, nil
 	}
 
-	// If receiver has liked sender, it's a match!
+	// ✅ If receiver has liked sender, it's a match!
 	if hasReceiverLiked {
 		log.Printf("🎉 Match confirmed: %s ❤️ %s", senderHandle, receiverHandle)
 		return true, nil
@@ -100,7 +98,7 @@ func (s *InteractionService) IsMatch(ctx context.Context, senderHandle, receiver
 	return false, nil
 }
 
-// CreateMatch creates a match if two users have liked each other
+// ✅ CreateMatch function creates a match when both users like each other
 func (s *InteractionService) CreateMatch(ctx context.Context, user1, user2 string) error {
 	matchID := uuid.New().String()
 	createdAt := time.Now().Format(time.RFC3339)
@@ -122,16 +120,17 @@ func (s *InteractionService) CreateMatch(ctx context.Context, user1, user2 strin
 	return nil
 }
 
-// ✅ GetLikedOrDislikedUsers returns a map of users who were liked/disliked
+// ✅ GetLikedOrDislikedUsers now correctly fetches interactions using GSI
 func (s *InteractionService) GetLikedOrDislikedUsers(ctx context.Context, senderHandle string) (map[string]bool, error) {
 	log.Printf("🔍 Fetching interactions for %s", senderHandle)
 
-	// Query interactions where senderHandle = senderHandle
+	// ✅ Query interactions where senderHandle = senderHandle
 	keyCondition := "senderHandle = :sender"
 	expressionValues := map[string]types.AttributeValue{
 		":sender": &types.AttributeValueMemberS{Value: senderHandle},
 	}
 
+	// ✅ Use GSI (`senderHandle-index`) for efficient querying
 	items, err := s.Dynamo.QueryItemsWithIndex(ctx, models.InteractionsTable, "senderHandle-index", keyCondition, expressionValues, nil, 100)
 	if err != nil {
 		log.Printf("❌ Error querying interactions: %v", err)
