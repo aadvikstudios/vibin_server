@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"vibin_server/models"
 	"vibin_server/services"
@@ -62,8 +63,6 @@ func (c *UserProfileController) GetUserProfileByEmail(w http.ResponseWriter, r *
 	// Return user profile
 	json.NewEncoder(w).Encode(profile)
 }
-
-// CheckUserHandleAvailability checks if a userhandle is already taken (based on partition key lookup)
 func (c *UserProfileController) CheckUserHandleAvailability(w http.ResponseWriter, r *http.Request) {
 	// Extract userhandle from query params
 	userHandle := r.URL.Query().Get("userhandle")
@@ -75,15 +74,17 @@ func (c *UserProfileController) CheckUserHandleAvailability(w http.ResponseWrite
 	// Check if userhandle exists
 	isAvailable, err := c.UserProfileService.IsUserHandleAvailable(context.TODO(), userHandle)
 	if err != nil {
+		log.Printf("❌ Error checking userhandle '%s': %v", userHandle, err)
 		http.Error(w, "Error checking userhandle", http.StatusInternalServerError)
 		return
 	}
 
 	// Return response
+	w.Header().Set("Content-Type", "application/json")
 	if isAvailable {
 		json.NewEncoder(w).Encode(map[string]bool{"available": true})
 	} else {
-		http.Error(w, "Userhandle is already taken", http.StatusConflict) // 409 Conflict
+		json.NewEncoder(w).Encode(map[string]bool{"available": false})
 	}
 }
 

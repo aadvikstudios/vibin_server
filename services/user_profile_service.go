@@ -178,11 +178,10 @@ func (ups *UserProfileService) DeleteUserProfile(ctx context.Context, userID str
 	return ups.Dynamo.DeleteItem(ctx, models.UserProfilesTable, key)
 }
 
-// IsUserHandleAvailable checks if a userhandle already exists (using it as the partition key)
 func (ups *UserProfileService) IsUserHandleAvailable(ctx context.Context, userHandle string) (bool, error) {
 	log.Printf("🔍 Checking availability of userhandle: %s", userHandle)
 
-	// Define key for the primary key lookup
+	// Define key for primary key lookup
 	key := map[string]types.AttributeValue{
 		"userhandle": &types.AttributeValueMemberS{Value: userHandle},
 	}
@@ -190,18 +189,18 @@ func (ups *UserProfileService) IsUserHandleAvailable(ctx context.Context, userHa
 	// Fetch item from DynamoDB using GetItem (since `userhandle` is the primary key)
 	item, err := ups.Dynamo.GetItem(ctx, models.UserProfilesTable, key)
 	if err != nil {
-		log.Printf("❌ Error querying userhandle: %v", err)
+		log.Printf("❌ Error querying userhandle '%s': %v", userHandle, err)
 		return false, fmt.Errorf("failed to check userhandle: %w", err)
 	}
 
-	// If item is nil, the userhandle does not exist (it's available)
-	if item == nil {
-		log.Println("✅ Userhandle is available.")
+	// If item is empty, the userhandle does not exist (it's available)
+	if len(item) == 0 {
+		log.Printf("✅ Userhandle '%s' is available.", userHandle)
 		return true, nil
 	}
 
 	// If item exists, the userhandle is taken
-	log.Println("❌ Userhandle is already taken.")
+	log.Printf("❌ Userhandle '%s' is already taken.", userHandle)
 	return false, nil
 }
 
