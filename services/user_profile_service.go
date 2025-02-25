@@ -181,7 +181,7 @@ func (ups *UserProfileService) DeleteUserProfile(ctx context.Context, userID str
 }
 
 func (ups *UserProfileService) IsUserHandleAvailable(ctx context.Context, userHandle string) (bool, error) {
-	log.Printf("🔍 Checking availability of userhandle new: %s", userHandle)
+	log.Printf("🔍 Checking availability of userhandle: %s", userHandle)
 
 	// Define the partition key for lookup
 	key := map[string]types.AttributeValue{
@@ -192,14 +192,21 @@ func (ups *UserProfileService) IsUserHandleAvailable(ctx context.Context, userHa
 	item, err := ups.Dynamo.GetItem(ctx, models.UserProfilesTable, key)
 	if err != nil {
 		// Handle "not found" case without treating it as an error
+		var notFoundErr *types.ResourceNotFoundException
+		if errors.As(err, &notFoundErr) {
+			log.Printf("✅ Userhandle '%s' is available (not found in DynamoDB).", userHandle)
+			return true, nil
+		}
+
+		// Check if it's an AWS DynamoDB error indicating a missing item
 		if awsErr, ok := err.(awserr.Error); ok && awsErr.Code() == dynamodb.ErrCodeResourceNotFoundException {
 			log.Printf("✅ Userhandle '%s' is available (not found in DynamoDB).", userHandle)
 			return true, nil
 		}
 
-		// ❌ Unexpected errors should still be logged
+		// ❌ Unexpected errors should still be logged and returned
 		log.Printf("❌ Unexpected error retrieving userhandle '%s' from DynamoDB: %v", userHandle, err)
-		return false, err
+		return false, fmt.Errorf("failed to check userhandle: %w", err)
 	}
 
 	// If no item is returned, the userhandle is available
