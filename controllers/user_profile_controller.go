@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"time"
 	"vibin_server/models"
 	"vibin_server/services"
 )
@@ -64,27 +65,31 @@ func (c *UserProfileController) GetUserProfileByEmail(w http.ResponseWriter, r *
 	json.NewEncoder(w).Encode(profile)
 }
 
-// CheckUserHandleAvailability API Route
 func (c *UserProfileController) CheckUserHandleAvailability(w http.ResponseWriter, r *http.Request) {
 	// Extract userhandle from query params
 	userHandle := r.URL.Query().Get("userhandle")
 	if userHandle == "" {
-		http.Error(w, "Missing required field: userhandle", http.StatusBadRequest)
+		http.Error(w, `{"error": "Missing required field: userhandle"}`, http.StatusBadRequest)
 		return
 	}
 
 	log.Printf("🔍 API Request to check userhandle: %s", userHandle)
 
+	// Use a context with timeout to avoid long-running requests
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
 	// Check if userhandle exists using `GetItem`
-	isAvailable, err := c.UserProfileService.IsUserHandleAvailable(context.TODO(), userHandle)
+	isAvailable, err := c.UserProfileService.IsUserHandleAvailable(ctx, userHandle)
 	if err != nil {
 		log.Printf("❌ Internal Server Error while checking userhandle '%s': %v", userHandle, err)
-		http.Error(w, "Error checking userhandle", http.StatusInternalServerError)
+		http.Error(w, `{"error": "Error checking userhandle"}`, http.StatusInternalServerError)
 		return
 	}
 
 	// ✅ Return JSON response
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]bool{"available": isAvailable})
 }
 

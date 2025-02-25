@@ -178,7 +178,7 @@ func (ups *UserProfileService) DeleteUserProfile(ctx context.Context, userID str
 	return ups.Dynamo.DeleteItem(ctx, models.UserProfilesTable, key)
 }
 
-// IsUserHandleAvailable checks if a userhandle already exists (using it as the partition key)
+// IsUserHandleAvailable checks if a userhandle already exists in DynamoDB.
 func (ups *UserProfileService) IsUserHandleAvailable(ctx context.Context, userHandle string) (bool, error) {
 	log.Printf("🔍 Checking availability of userhandle: %s", userHandle)
 
@@ -187,15 +187,22 @@ func (ups *UserProfileService) IsUserHandleAvailable(ctx context.Context, userHa
 		"userhandle": &types.AttributeValueMemberS{Value: userHandle}, // ✅ Partition Key
 	}
 
-	// Fetch item using GetItem (since `userhandle` is the primary key)
+	// Fetch item using GetItem
 	item, err := ups.Dynamo.GetItem(ctx, models.UserProfilesTable, key)
 	if err != nil {
+		var notFoundErr *types.ResourceNotFoundException
+		if errors.As(err, &notFoundErr) {
+			log.Printf("✅ Userhandle '%s' is available (not found in DynamoDB).", userHandle)
+			return true, nil
+		}
+
+		// Log unexpected errors
 		log.Printf("❌ Error retrieving userhandle '%s' from DynamoDB: %v", userHandle, err)
 		return false, fmt.Errorf("failed to check userhandle: %w", err)
 	}
 
-	// 🔍 ✅ Improved Check: Handle nil case properly
-	if item == nil {
+	// If item is nil or empty, the userhandle is available
+	if item == nil || len(item) == 0 {
 		log.Printf("✅ Userhandle '%s' is available.", userHandle)
 		return true, nil
 	}
