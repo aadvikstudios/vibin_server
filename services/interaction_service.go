@@ -8,6 +8,7 @@ import (
 
 	"vibin_server/models"
 
+	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/google/uuid"
 )
@@ -41,37 +42,62 @@ func (s *InteractionService) SaveInteraction(ctx context.Context, senderHandle, 
 	return nil
 }
 
-// HasUserLiked checks if a user has already liked another user
-func (s *InteractionService) HasUserLiked(ctx context.Context, senderHandle, receiverHandle string) (bool, error) {
-	keyCondition := "senderHandle = :sender AND receiverHandle = :receiver AND #type = :type"
+// HasUserLiked checks if the given receiver has liked the sender (i.e., mutual match check)
+func (s *InteractionService) HasUserLiked(ctx context.Context, receiverHandle, senderHandle string) (bool, error) {
+	log.Printf("🔍 Checking if %s has liked %s", receiverHandle, senderHandle)
+
+	// Query DynamoDB using receiverHandle as partition key
+	keyCondition := "receiverHandle = :receiver AND #type = :type"
 	expressionValues := map[string]types.AttributeValue{
-		":sender":   &types.AttributeValueMemberS{Value: senderHandle},
 		":receiver": &types.AttributeValueMemberS{Value: receiverHandle},
 		":type":     &types.AttributeValueMemberS{Value: "like"},
 	}
 	expressionNames := map[string]string{"#type": "type"}
 
+	// Query interactions table
 	items, err := s.Dynamo.QueryItems(ctx, models.InteractionsTable, keyCondition, expressionValues, expressionNames, 1)
 	if err != nil {
-		return false, err
+		log.Printf("❌ Error querying likes for %s: %v", receiverHandle, err)
+		return false, nil
 	}
 
-	return len(items) > 0, nil
+	// Check if senderHandle is in the result (has liked the sender)
+	for _, item := range items {
+		var interaction models.Interaction
+		err := attributevalue.UnmarshalMap(item, &interaction)
+		if err != nil {
+			log.Printf("❌ Error unmarshalling interaction: %v", err)
+			continue
+		}
+		if interaction.SenderHandle == senderHandle {
+			log.Printf("✅ %s has already liked %s", receiverHandle, senderHandle)
+			return true, nil
+		}
+	}
+
+	log.Printf("⚠️ %s has NOT liked %s", receiverHandle, senderHandle)
+	return false, nil
 }
 
 // IsMatch checks if two users have liked each other
 func (s *InteractionService) IsMatch(ctx context.Context, senderHandle, receiverHandle string) (bool, error) {
-	hasSenderLiked, err := s.HasUserLiked(ctx, senderHandle, receiverHandle)
-	if err != nil || !hasSenderLiked {
-		return false, err
-	}
+	log.Printf("🔍 Checking match status for %s and %s", senderHandle, receiverHandle)
 
+	// Check if receiver has liked the sender
 	hasReceiverLiked, err := s.HasUserLiked(ctx, receiverHandle, senderHandle)
-	if err != nil || !hasReceiverLiked {
-		return false, err
+	if err != nil {
+		log.Printf("❌ Error checking if %s liked %s: %v", receiverHandle, senderHandle, err)
+		return false, nil
 	}
 
-	return true, nil
+	// If receiver has liked sender, it's a match!
+	if hasReceiverLiked {
+		log.Printf("🎉 Match confirmed: %s ❤️ %s", senderHandle, receiverHandle)
+		return true, nil
+	}
+
+	log.Printf("⚠️ No match yet for %s and %s", senderHandle, receiverHandle)
+	return false, nil
 }
 
 // CreateMatch creates a match if two users have liked each other
