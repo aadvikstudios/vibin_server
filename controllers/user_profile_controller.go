@@ -143,7 +143,7 @@ func (c *UserProfileController) GetUserHandleByEmail(w http.ResponseWriter, r *h
 // ✅ GetUserSuggestions retrieves a list of users based on gender (excluding requester)
 func (c *UserProfileController) GetUserSuggestions(w http.ResponseWriter, r *http.Request) {
 	var request struct {
-		UserHandle string `json:"userHandle"`
+		UserHandle string `json:"userhandle"`
 		Gender     string `json:"gender"`
 	}
 
