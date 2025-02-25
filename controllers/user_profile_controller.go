@@ -63,6 +63,8 @@ func (c *UserProfileController) GetUserProfileByEmail(w http.ResponseWriter, r *
 	// Return user profile
 	json.NewEncoder(w).Encode(profile)
 }
+
+// CheckUserHandleAvailability API Route
 func (c *UserProfileController) CheckUserHandleAvailability(w http.ResponseWriter, r *http.Request) {
 	// Extract userhandle from query params
 	userHandle := r.URL.Query().Get("userhandle")
@@ -71,21 +73,19 @@ func (c *UserProfileController) CheckUserHandleAvailability(w http.ResponseWrite
 		return
 	}
 
-	// Check if userhandle exists
+	log.Printf("🔍 API Request to check userhandle: %s", userHandle)
+
+	// Check if userhandle exists using `GetItem`
 	isAvailable, err := c.UserProfileService.IsUserHandleAvailable(context.TODO(), userHandle)
 	if err != nil {
-		log.Printf("❌ Error checking userhandle '%s': %v", userHandle, err)
+		log.Printf("❌ Internal Server Error while checking userhandle '%s': %v", userHandle, err)
 		http.Error(w, "Error checking userhandle", http.StatusInternalServerError)
 		return
 	}
 
-	// Return response
+	// ✅ Return JSON response
 	w.Header().Set("Content-Type", "application/json")
-	if isAvailable {
-		json.NewEncoder(w).Encode(map[string]bool{"available": true})
-	} else {
-		json.NewEncoder(w).Encode(map[string]bool{"available": false})
-	}
+	json.NewEncoder(w).Encode(map[string]bool{"available": isAvailable})
 }
 
 // CheckEmailAvailability checks if an email exists and returns `exists: true/false`
