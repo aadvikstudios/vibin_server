@@ -202,3 +202,61 @@ func (ups *UserProfileService) IsUserHandleAvailable(ctx context.Context, userHa
 	log.Println("❌ Userhandle is already taken.")
 	return false, nil
 }
+
+// CheckEmailExists checks if an email ID exists in the database
+func (ups *UserProfileService) CheckEmailExists(ctx context.Context, emailID string) (bool, error) {
+	log.Printf("🔍 Checking if email exists: %s", emailID)
+
+	// Define query parameters
+	keyCondition := "emailId = :emailId"
+	expressionAttributeValues := map[string]types.AttributeValue{
+		":emailId": &types.AttributeValueMemberS{Value: emailID},
+	}
+
+	// Query GSI (emailId-index)
+	items, err := ups.Dynamo.QueryItemsWithIndex(ctx, models.UserProfilesTable, "emailId-index", keyCondition, expressionAttributeValues, nil, 1)
+	if err != nil {
+		log.Printf("❌ Error querying email index: %v", err)
+		return false, fmt.Errorf("failed to check email existence: %w", err)
+	}
+
+	// If items found, email exists
+	exists := len(items) > 0
+	log.Printf("✅ Email found: %t", exists)
+	return exists, nil
+}
+
+// GetUserHandleByEmail retrieves a userhandle based on an email lookup
+func (ups *UserProfileService) GetUserHandleByEmail(ctx context.Context, emailID string) (string, error) {
+	log.Printf("🔍 Fetching userhandle for email: %s", emailID)
+
+	// Define query parameters
+	keyCondition := "emailId = :emailId"
+	expressionAttributeValues := map[string]types.AttributeValue{
+		":emailId": &types.AttributeValueMemberS{Value: emailID},
+	}
+
+	// Query GSI (emailId-index)
+	items, err := ups.Dynamo.QueryItemsWithIndex(ctx, models.UserProfilesTable, "emailId-index", keyCondition, expressionAttributeValues, nil, 1)
+	if err != nil {
+		log.Printf("❌ Error querying email index: %v", err)
+		return "", fmt.Errorf("failed to fetch userhandle: %w", err)
+	}
+
+	// If no item found, return 404
+	if len(items) == 0 {
+		log.Printf("❌ Email not found: %s", emailID)
+		return "", nil
+	}
+
+	// Unmarshal and extract userhandle
+	var profile models.UserProfile
+	err = attributevalue.UnmarshalMap(items[0], &profile)
+	if err != nil {
+		log.Printf("❌ Error unmarshalling user profile: %v", err)
+		return "", fmt.Errorf("failed to unmarshal user profile: %w", err)
+	}
+
+	log.Printf("✅ Found userhandle: %s for email: %s", profile.UserHandle, emailID)
+	return profile.UserHandle, nil
+}

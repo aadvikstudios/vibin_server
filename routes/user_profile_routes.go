@@ -14,5 +14,7 @@ func RegisterUserProfileRoutes(r *mux.Router, userProfileService *services.UserP
 	profileRouter.HandleFunc("", controller.CreateUserProfile).Methods("POST")
 	profileRouter.HandleFunc("/email/profile", controller.GetUserProfileByEmail).Methods("POST")
 	profileRouter.HandleFunc("/check-userhandle", controller.CheckUserHandleAvailability).Methods("GET") // ✅ New Route
+	profileRouter.HandleFunc("/check-email", controller.CheckEmailAvailability).Methods("POST")
+	profileRouter.HandleFunc("/fetch-userhandle", controller.GetUserHandleByEmail).Methods("GET")
 
 }

@@ -86,3 +86,51 @@ func (c *UserProfileController) CheckUserHandleAvailability(w http.ResponseWrite
 		"message": "Userhandle is available",
 	})
 }
+
+// CheckEmailAvailability checks if an email exists and returns `exists: true/false`
+func (c *UserProfileController) CheckEmailAvailability(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		EmailID string `json:"emailId"`
+	}
+
+	// Decode JSON request
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil || request.EmailID == "" {
+		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+		return
+	}
+
+	// Check if email exists
+	exists, err := c.UserProfileService.CheckEmailExists(context.TODO(), request.EmailID)
+	if err != nil {
+		http.Error(w, "Error checking email availability", http.StatusInternalServerError)
+		return
+	}
+
+	// Return response
+	json.NewEncoder(w).Encode(map[string]bool{"exists": exists})
+}
+
+// GetUserHandleByEmail fetches the userhandle associated with an email
+func (c *UserProfileController) GetUserHandleByEmail(w http.ResponseWriter, r *http.Request) {
+	emailID := r.URL.Query().Get("emailId")
+	if emailID == "" {
+		http.Error(w, "Missing required parameter: emailId", http.StatusBadRequest)
+		return
+	}
+
+	// Fetch userhandle
+	userHandle, err := c.UserProfileService.GetUserHandleByEmail(context.TODO(), emailID)
+	if err != nil {
+		http.Error(w, "Error fetching userhandle", http.StatusInternalServerError)
+		return
+	}
+
+	// If userhandle is empty, return 404
+	if userHandle == "" {
+		http.Error(w, "Email not found", http.StatusNotFound)
+		return
+	}
+
+	// Return userhandle
+	json.NewEncoder(w).Encode(map[string]string{"userhandle": userHandle})
+}
