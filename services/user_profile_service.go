@@ -269,3 +269,46 @@ func (ups *UserProfileService) GetUserHandleByEmail(ctx context.Context, emailID
 	log.Printf("✅ Found userhandle: %s for email: %s", profile.UserHandle, emailID)
 	return profile.UserHandle, nil
 }
+
+// ✅ GetUserSuggestions retrieves a list of users by gender (excluding requester)
+func (ups *UserProfileService) GetUserSuggestions(ctx context.Context, userHandle, gender string) ([]models.UserProfile, error) {
+	log.Printf("🔍 Fetching user suggestions for gender: %s, excluding: %s", gender, userHandle)
+
+	// Define query parameters for the GSI (gender-index)
+	keyCondition := "gender = :gender"
+	expressionAttributeValues := map[string]types.AttributeValue{
+		":gender": &types.AttributeValueMemberS{Value: gender},
+	}
+
+	// Query the `gender-index` GSI
+	items, err := ups.Dynamo.QueryItemsWithIndex(ctx, models.UserProfilesTable, "gender-index", keyCondition, expressionAttributeValues, nil, 50)
+	if err != nil {
+		log.Printf("❌ Error querying gender index: %v", err)
+		return nil, fmt.Errorf("failed to fetch user suggestions: %w", err)
+	}
+
+	// If no users found, return an empty array
+	if len(items) == 0 {
+		log.Println("⚠️ No profiles found matching the criteria.")
+		return []models.UserProfile{}, nil
+	}
+
+	// Unmarshal result into a list of UserProfile structs
+	var profiles []models.UserProfile
+	err = attributevalue.UnmarshalListOfMaps(items, &profiles)
+	if err != nil {
+		log.Printf("❌ Error unmarshalling user profiles: %v", err)
+		return nil, fmt.Errorf("failed to unmarshal user profiles: %w", err)
+	}
+
+	// ✅ Filter out the requester from the result
+	filteredProfiles := make([]models.UserProfile, 0)
+	for _, profile := range profiles {
+		if profile.UserHandle != userHandle {
+			filteredProfiles = append(filteredProfiles, profile)
+		}
+	}
+
+	log.Printf("✅ Successfully fetched %d user suggestions.", len(filteredProfiles))
+	return filteredProfiles, nil
+}

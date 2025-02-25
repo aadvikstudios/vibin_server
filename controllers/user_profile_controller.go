@@ -139,3 +139,29 @@ func (c *UserProfileController) GetUserHandleByEmail(w http.ResponseWriter, r *h
 	// Return userhandle
 	json.NewEncoder(w).Encode(map[string]string{"userhandle": userHandle})
 }
+
+// ✅ GetUserSuggestions retrieves a list of users based on gender (excluding requester)
+func (c *UserProfileController) GetUserSuggestions(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		UserHandle string `json:"userHandle"`
+		Gender     string `json:"gender"`
+	}
+
+	// Decode JSON request
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil || request.Gender == "" || request.UserHandle == "" {
+		http.Error(w, `{"error": "Invalid request payload, must include 'userHandle' and 'gender'"}`, http.StatusBadRequest)
+		return
+	}
+
+	// Fetch user suggestions
+	users, err := c.UserProfileService.GetUserSuggestions(context.TODO(), request.UserHandle, request.Gender)
+	if err != nil {
+		log.Printf("❌ Error fetching user suggestions: %v", err)
+		http.Error(w, `{"error": "Failed to fetch user suggestions"}`, http.StatusInternalServerError)
+		return
+	}
+
+	// Return users as JSON response
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(users)
+}
