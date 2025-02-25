@@ -40,28 +40,25 @@ func (s *InteractionService) SaveInteraction(ctx context.Context, senderHandle, 
 	return nil
 }
 
-// ✅ Optimized `HasUserLiked` to use `senderHandle-index`
-// ✅ Corrected Query Condition for GSI
+// ✅ Corrected Query for senderHandle GSI
 func (s *InteractionService) HasUserLiked(ctx context.Context, receiverHandle, senderHandle string) (bool, error) {
 	log.Printf("🔍 Checking if %s has liked %s", receiverHandle, senderHandle)
 
-	// ✅ Use `senderHandle` as partition key for GSI query
-	keyCondition := "senderHandle = :sender AND #type = :type"
+	// ✅ Corrected Query Condition: Query GSI using senderHandle only
+	keyCondition := "senderHandle = :sender"
 	expressionValues := map[string]types.AttributeValue{
-		":sender": &types.AttributeValueMemberS{Value: receiverHandle}, // ✅ Use as partition key
-		":type":   &types.AttributeValueMemberS{Value: "like"},         // ✅ Filter by type
+		":sender": &types.AttributeValueMemberS{Value: receiverHandle}, // ✅ Query by senderHandle
 	}
-	expressionNames := map[string]string{"#type": "type"}
 
-	// ✅ Query the senderHandle-index
+	// ✅ Query senderHandle-index
 	log.Printf("🔍 Querying GSI: senderHandle-index in table: %s", models.InteractionsTable)
-	items, err := s.Dynamo.QueryItemsWithIndex(ctx, models.InteractionsTable, "senderHandle-index", keyCondition, expressionValues, expressionNames, 1)
+	items, err := s.Dynamo.QueryItemsWithIndex(ctx, models.InteractionsTable, "senderHandle-index", keyCondition, expressionValues, nil, 100)
 	if err != nil {
 		log.Printf("❌ Error querying GSI: %v", err)
 		return false, nil
 	}
 
-	// ✅ Check if the receiver has liked the sender
+	// ✅ Check if the receiverHandle exists in the results
 	for _, item := range items {
 		var interaction models.Interaction
 		err := attributevalue.UnmarshalMap(item, &interaction)
@@ -69,7 +66,9 @@ func (s *InteractionService) HasUserLiked(ctx context.Context, receiverHandle, s
 			log.Printf("❌ Error unmarshalling interaction: %v", err)
 			continue
 		}
-		if interaction.ReceiverHandle == senderHandle {
+
+		// ✅ Ensure it was a "like" interaction
+		if interaction.ReceiverHandle == senderHandle && interaction.Type == "like" {
 			log.Printf("✅ %s has already liked %s", receiverHandle, senderHandle)
 			return true, nil
 		}
