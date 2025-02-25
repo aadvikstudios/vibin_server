@@ -256,7 +256,7 @@ func haversine(lat1, lon1, lat2, lon2 float64) float64 {
 	return R * c
 }
 
-// ✅ GetUserSuggestions retrieves a list of users based on gender & calculates distance
+// ✅ GetUserSuggestions retrieves a list of users based on gender & interaction history
 func (ups *UserProfileService) GetUserSuggestions(ctx context.Context, userHandle, gender string) ([]models.UserProfile, error) {
 	log.Printf("🔍 Fetching user suggestions for gender: %s, excluding: %s", gender, userHandle)
 
@@ -267,32 +267,37 @@ func (ups *UserProfileService) GetUserSuggestions(ctx context.Context, userHandl
 		return nil, fmt.Errorf("failed to fetch requester profile: %w", err)
 	}
 
-	// Ensure requester's location is available
 	if requesterProfile.Latitude == 0 || requesterProfile.Longitude == 0 {
 		log.Println("⚠️ Requester profile does not have valid latitude/longitude")
 		return nil, fmt.Errorf("requester location missing")
 	}
 
-	// Step 2: Define query parameters for the GSI (gender-index)
+	// Step 2: Fetch interaction history (liked/disliked profiles)
+	interactionService := InteractionService{Dynamo: ups.Dynamo} // Use InteractionService
+	likedDislikedUsers, err := interactionService.GetLikedOrDislikedUsers(ctx, userHandle)
+	if err != nil {
+		log.Printf("❌ Error fetching interaction history: %v", err)
+		return nil, fmt.Errorf("failed to fetch interactions: %w", err)
+	}
+
+	// Step 3: Query the `gender-index` GSI
 	keyCondition := "gender = :gender"
 	expressionAttributeValues := map[string]types.AttributeValue{
 		":gender": &types.AttributeValueMemberS{Value: gender},
 	}
 
-	// Step 3: Query the `gender-index` GSI
 	items, err := ups.Dynamo.QueryItemsWithIndex(ctx, models.UserProfilesTable, "gender-index", keyCondition, expressionAttributeValues, nil, 50)
 	if err != nil {
 		log.Printf("❌ Error querying gender index: %v", err)
 		return nil, fmt.Errorf("failed to fetch user suggestions: %w", err)
 	}
 
-	// Step 4: If no users found, return an empty array
 	if len(items) == 0 {
 		log.Println("⚠️ No profiles found matching the criteria.")
 		return []models.UserProfile{}, nil
 	}
 
-	// Step 5: Unmarshal result into a list of UserProfile structs
+	// Step 4: Unmarshal result into a list of UserProfile structs
 	var profiles []models.UserProfile
 	err = attributevalue.UnmarshalListOfMaps(items, &profiles)
 	if err != nil {
@@ -300,18 +305,19 @@ func (ups *UserProfileService) GetUserSuggestions(ctx context.Context, userHandl
 		return nil, fmt.Errorf("failed to unmarshal user profiles: %w", err)
 	}
 
-	// Step 6: Filter out the requester and calculate distance
+	// Step 5: Filter out already liked/disliked users and calculate distance
 	filteredProfiles := make([]models.UserProfile, 0)
 	for _, profile := range profiles {
 		if profile.UserHandle != userHandle && profile.Latitude != 0 && profile.Longitude != 0 {
-			// ✅ Calculate distance between requester & profile
-			distance := haversine(requesterProfile.Latitude, requesterProfile.Longitude, profile.Latitude, profile.Longitude)
-			profile.DistanceBetween = distance
-			filteredProfiles = append(filteredProfiles, profile)
+			if _, exists := likedDislikedUsers[profile.UserHandle]; !exists {
+				distance := haversine(requesterProfile.Latitude, requesterProfile.Longitude, profile.Latitude, profile.Longitude)
+				profile.DistanceBetween = distance
+				filteredProfiles = append(filteredProfiles, profile)
+			}
 		}
 	}
 
-	// Step 7: Sort by distance (optional)
+	// Step 6: Sort by distance (optional)
 	sort.Slice(filteredProfiles, func(i, j int) bool {
 		return filteredProfiles[i].DistanceBetween < filteredProfiles[j].DistanceBetween
 	})

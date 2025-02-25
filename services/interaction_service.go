@@ -121,3 +121,34 @@ func (s *InteractionService) CreateMatch(ctx context.Context, user1, user2 strin
 	log.Printf("🎉 Match created: %s ❤️ %s", user1, user2)
 	return nil
 }
+
+// ✅ GetLikedOrDislikedUsers returns a map of users who were liked/disliked
+func (s *InteractionService) GetLikedOrDislikedUsers(ctx context.Context, senderHandle string) (map[string]bool, error) {
+	log.Printf("🔍 Fetching interactions for %s", senderHandle)
+
+	// Query interactions where senderHandle = senderHandle
+	keyCondition := "senderHandle = :sender"
+	expressionValues := map[string]types.AttributeValue{
+		":sender": &types.AttributeValueMemberS{Value: senderHandle},
+	}
+
+	items, err := s.Dynamo.QueryItemsWithIndex(ctx, models.InteractionsTable, "senderHandle-index", keyCondition, expressionValues, nil, 100)
+	if err != nil {
+		log.Printf("❌ Error querying interactions: %v", err)
+		return nil, fmt.Errorf("failed to fetch interactions: %w", err)
+	}
+
+	likedDislikedUsers := make(map[string]bool)
+	for _, item := range items {
+		var interaction models.Interaction
+		err := attributevalue.UnmarshalMap(item, &interaction)
+		if err != nil {
+			log.Printf("❌ Error unmarshalling interaction: %v", err)
+			continue
+		}
+		likedDislikedUsers[interaction.ReceiverHandle] = true
+	}
+
+	log.Printf("✅ Found %d interactions for %s", len(likedDislikedUsers), senderHandle)
+	return likedDislikedUsers, nil
+}
