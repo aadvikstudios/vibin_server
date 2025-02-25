@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
+	"sort"
 	"strings"
 	"vibin_server/models"
 
@@ -139,38 +141,6 @@ func (ups *UserProfileService) UpdateUserProfile(ctx context.Context, emailID st
 	return &updatedProfile, nil
 }
 
-// #[TODO] check if below functions are proper
-// Helper function to fetch a profile by email WITHOUT distance calculation
-// func (ups *UserProfileService) GetUserProfileByEmailWithoutDistance(ctx context.Context, emailID string) (*models.UserProfile, error) {
-// 	log.Printf("Fetching profile by email: %s\n", emailID)
-
-// 	keyCondition := "emailId = :emailId"
-// 	expressionAttributeValues := map[string]types.AttributeValue{
-// 		":emailId": &types.AttributeValueMemberS{Value: emailID},
-// 	}
-
-// 	items, err := ups.Dynamo.QueryItems(ctx, models.UserProfilesTable, keyCondition, expressionAttributeValues, nil, 1)
-// 	if err != nil {
-// 		log.Printf("Error querying DynamoDB: %v\n", err)
-// 		return nil, fmt.Errorf("failed to fetch profile by email: %w", err)
-// 	}
-
-// 	if len(items) == 0 {
-// 		log.Printf("No profile found for email: %s\n", emailID)
-// 		return nil, nil // No profile found
-// 	}
-
-// 	var profile models.UserProfile
-// 	err = attributevalue.UnmarshalMap(items[0], &profile)
-// 	if err != nil {
-// 		log.Printf("Error unmarshalling DynamoDB item: %v\n", err)
-// 		return nil, fmt.Errorf("failed to unmarshal profile: %w", err)
-// 	}
-
-// 	log.Printf("Profile fetched successfully: %+v\n", profile)
-// 	return &profile, nil
-// }
-
 // DeleteUserProfile removes a user profile from DynamoDB
 func (ups *UserProfileService) DeleteUserProfile(ctx context.Context, userID string) error {
 	key := map[string]types.AttributeValue{
@@ -270,30 +240,59 @@ func (ups *UserProfileService) GetUserHandleByEmail(ctx context.Context, emailID
 	return profile.UserHandle, nil
 }
 
-// ✅ GetUserSuggestions retrieves a list of users by gender (excluding requester)
+// ✅ Haversine formula to calculate distance (in km) between two lat/lng points
+func haversine(lat1, lon1, lat2, lon2 float64) float64 {
+	const R = 6371 // Earth's radius in km
+	dLat := (lat2 - lat1) * (math.Pi / 180.0)
+	dLon := (lon2 - lon1) * (math.Pi / 180.0)
+
+	lat1Rad := lat1 * (math.Pi / 180.0)
+	lat2Rad := lat2 * (math.Pi / 180.0)
+
+	a := math.Sin(dLat/2)*math.Sin(dLat/2) +
+		math.Sin(dLon/2)*math.Sin(dLon/2)*math.Cos(lat1Rad)*math.Cos(lat2Rad)
+	c := 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
+
+	return R * c
+}
+
+// ✅ GetUserSuggestions retrieves a list of users based on gender & calculates distance
 func (ups *UserProfileService) GetUserSuggestions(ctx context.Context, userHandle, gender string) ([]models.UserProfile, error) {
 	log.Printf("🔍 Fetching user suggestions for gender: %s, excluding: %s", gender, userHandle)
 
-	// Define query parameters for the GSI (gender-index)
+	// Step 1: Fetch requester's latitude & longitude
+	requesterProfile, err := ups.GetUserProfileByHandle(ctx, userHandle)
+	if err != nil {
+		log.Printf("❌ Error fetching requester's profile: %v", err)
+		return nil, fmt.Errorf("failed to fetch requester profile: %w", err)
+	}
+
+	// Ensure requester's location is available
+	if requesterProfile.Latitude == 0 || requesterProfile.Longitude == 0 {
+		log.Println("⚠️ Requester profile does not have valid latitude/longitude")
+		return nil, fmt.Errorf("requester location missing")
+	}
+
+	// Step 2: Define query parameters for the GSI (gender-index)
 	keyCondition := "gender = :gender"
 	expressionAttributeValues := map[string]types.AttributeValue{
 		":gender": &types.AttributeValueMemberS{Value: gender},
 	}
 
-	// Query the `gender-index` GSI
+	// Step 3: Query the `gender-index` GSI
 	items, err := ups.Dynamo.QueryItemsWithIndex(ctx, models.UserProfilesTable, "gender-index", keyCondition, expressionAttributeValues, nil, 50)
 	if err != nil {
 		log.Printf("❌ Error querying gender index: %v", err)
 		return nil, fmt.Errorf("failed to fetch user suggestions: %w", err)
 	}
 
-	// If no users found, return an empty array
+	// Step 4: If no users found, return an empty array
 	if len(items) == 0 {
 		log.Println("⚠️ No profiles found matching the criteria.")
 		return []models.UserProfile{}, nil
 	}
 
-	// Unmarshal result into a list of UserProfile structs
+	// Step 5: Unmarshal result into a list of UserProfile structs
 	var profiles []models.UserProfile
 	err = attributevalue.UnmarshalListOfMaps(items, &profiles)
 	if err != nil {
@@ -301,14 +300,46 @@ func (ups *UserProfileService) GetUserSuggestions(ctx context.Context, userHandl
 		return nil, fmt.Errorf("failed to unmarshal user profiles: %w", err)
 	}
 
-	// ✅ Filter out the requester from the result
+	// Step 6: Filter out the requester and calculate distance
 	filteredProfiles := make([]models.UserProfile, 0)
 	for _, profile := range profiles {
-		if profile.UserHandle != userHandle {
+		if profile.UserHandle != userHandle && profile.Latitude != 0 && profile.Longitude != 0 {
+			// ✅ Calculate distance between requester & profile
+			distance := haversine(requesterProfile.Latitude, requesterProfile.Longitude, profile.Latitude, profile.Longitude)
+			profile.DistanceBetween = distance
 			filteredProfiles = append(filteredProfiles, profile)
 		}
 	}
 
+	// Step 7: Sort by distance (optional)
+	sort.Slice(filteredProfiles, func(i, j int) bool {
+		return filteredProfiles[i].DistanceBetween < filteredProfiles[j].DistanceBetween
+	})
+
 	log.Printf("✅ Successfully fetched %d user suggestions.", len(filteredProfiles))
 	return filteredProfiles, nil
+}
+
+// ✅ Fetch a user profile by userHandle
+func (ups *UserProfileService) GetUserProfileByHandle(ctx context.Context, userHandle string) (*models.UserProfile, error) {
+	key := map[string]types.AttributeValue{
+		"userhandle": &types.AttributeValueMemberS{Value: userHandle},
+	}
+
+	item, err := ups.Dynamo.GetItem(ctx, models.UserProfilesTable, key)
+	if err != nil {
+		return nil, err
+	}
+
+	if item == nil {
+		return nil, fmt.Errorf("profile not found")
+	}
+
+	var profile models.UserProfile
+	err = attributevalue.UnmarshalMap(item, &profile)
+	if err != nil {
+		return nil, err
+	}
+
+	return &profile, nil
 }
