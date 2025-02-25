@@ -19,5 +19,5 @@ func RegisterUserProfileRoutes(r *mux.Router, userProfileService *services.UserP
 	profileRouter.HandleFunc("/fetch-userhandle", controller.GetUserHandleByEmail).Methods("GET")
 
 	// ✅ New route to fetch suggested profiles based on gender
-	profileRouter.HandleFunc("/suggestions", controller.GetUserSuggestions).Methods("POST")
+	profileRouter.HandleFunc("/suggestions", controller.GetUserSuggestions).Methods("GET")
 }
