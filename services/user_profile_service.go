@@ -178,38 +178,29 @@ func (ups *UserProfileService) DeleteUserProfile(ctx context.Context, userID str
 	return ups.Dynamo.DeleteItem(ctx, models.UserProfilesTable, key)
 }
 
-// IsUserHandleAvailable checks if a userhandle is already taken using the GSI
+// IsUserHandleAvailable checks if a userhandle already exists (using it as the partition key)
 func (ups *UserProfileService) IsUserHandleAvailable(ctx context.Context, userHandle string) (bool, error) {
 	log.Printf("🔍 Checking availability of userhandle: %s", userHandle)
 
-	// Query using the Global Secondary Index (GSI) instead of the main table
-	keyCondition := "userhandle = :userhandle"
-	expressionAttributeValues := map[string]types.AttributeValue{
-		":userhandle": &types.AttributeValueMemberS{Value: userHandle},
+	// Define key for the primary key lookup
+	key := map[string]types.AttributeValue{
+		"userhandle": &types.AttributeValueMemberS{Value: userHandle},
 	}
 
-	// ✅ Specify the GSI name (`userhandle-index`) instead of the main table
-	items, err := ups.Dynamo.QueryItemsWithIndex(ctx, models.UserProfilesTable, "userhandle-index", keyCondition, expressionAttributeValues, nil, 1)
+	// Fetch item from DynamoDB using GetItem (since `userhandle` is the primary key)
+	item, err := ups.Dynamo.GetItem(ctx, models.UserProfilesTable, key)
 	if err != nil {
-		log.Printf("❌ Error querying userhandle: %v\n", err)
+		log.Printf("❌ Error querying userhandle: %v", err)
 		return false, fmt.Errorf("failed to check userhandle: %w", err)
 	}
 
-	// If userhandle is NOT present in DB, assume it's available
-	if len(items) == 0 {
-		log.Println("✅ No matching userhandle found, assuming availability.")
+	// If item is nil, the userhandle does not exist (it's available)
+	if item == nil {
+		log.Println("✅ Userhandle is available.")
 		return true, nil
 	}
 
-	// Unmarshal the item
-	var profile models.UserProfile
-	err = attributevalue.UnmarshalMap(items[0], &profile)
-	if err != nil {
-		log.Printf("❌ Error unmarshalling user profile: %v\n", err)
-		return false, fmt.Errorf("failed to unmarshal profile: %w", err)
-	}
-
-	// If userhandle exists, return false (taken)
+	// If item exists, the userhandle is taken
 	log.Println("❌ Userhandle is already taken.")
 	return false, nil
 }
