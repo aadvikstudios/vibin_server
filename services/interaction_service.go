@@ -190,17 +190,17 @@ func (s *InteractionService) SendInitialMessage(ctx context.Context, matchID, se
 	return nil
 }
 
-// UpdateInteractionStatus - Update the status of an interaction (like, ping, etc.)
+// UpdateInteractionStatus - Corrected to update existing record instead of creating a new one
 func (s *InteractionService) UpdateInteractionStatus(ctx context.Context, senderHandle, receiverHandle, newStatus string) error {
 	log.Printf("🔄 Updating interaction status to '%s' for %s -> %s", newStatus, senderHandle, receiverHandle)
 
-	// Define Key (PK and SK)
+	// Define Key (PK and SK) for updating the correct interaction record
 	key := map[string]types.AttributeValue{
 		"receiverHandle": &types.AttributeValueMemberS{Value: receiverHandle},
-		"sk":             &types.AttributeValueMemberS{Value: senderHandle + "#ping"}, // ✅ Ensure it updates a ping interaction
+		"sk":             &types.AttributeValueMemberS{Value: senderHandle + "#like"}, // Ensure it targets the correct interaction type
 	}
 
-	// Define Update Expression
+	// Define Update Expression to modify the status field
 	updateExpression := "SET #status = :status"
 	expressionValues := map[string]types.AttributeValue{
 		":status": &types.AttributeValueMemberS{Value: newStatus},
