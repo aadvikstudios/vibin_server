@@ -7,15 +7,12 @@ import (
 	"github.com/gorilla/mux"
 )
 
-// RegisterChatRoutes registers chat-related endpoints
+// RegisterChatRoutes registers chat-related routes
 func RegisterChatRoutes(r *mux.Router, chatService *services.ChatService) {
 	controller := controllers.NewChatController(chatService)
 
 	chatRouter := r.PathPrefix("/api/chat").Subrouter()
-
-	// ✅ Fetch messages
-	chatRouter.HandleFunc("/messages", controller.HandleGetMessages).Methods("GET")
-
-	// ✅ Mark messages as read (Updated to include userHandle)
-	chatRouter.HandleFunc("/messages/mark-as-read", controller.HandleMarkMessagesAsRead).Methods("POST")
+	chatRouter.HandleFunc("/message", controller.HandleSendMessage).Methods("POST")                      // ✅ Send message
+	chatRouter.HandleFunc("/messages", controller.HandleGetMessages).Methods("GET")                      // ✅ Get messages
+	chatRouter.HandleFunc("/messages/mark-as-read", controller.HandleMarkMessagesAsRead).Methods("POST") // ✅ Mark messages as read
 }

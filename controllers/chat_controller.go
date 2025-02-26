@@ -6,7 +6,11 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"time"
+	"vibin_server/models"
 	"vibin_server/services"
+
+	"github.com/google/uuid"
 )
 
 // ChatController struct
@@ -75,4 +79,50 @@ func (c *ChatController) HandleMarkMessagesAsRead(w http.ResponseWriter, r *http
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "success", "message": "Messages received by user marked as read"})
+}
+
+// HandleSendMessage - Handles sending a new message
+func (c *ChatController) HandleSendMessage(w http.ResponseWriter, r *http.Request) {
+	var message models.Message
+
+	// Decode request body
+	if err := json.NewDecoder(r.Body).Decode(&message); err != nil {
+		http.Error(w, `{"error": "Invalid request body"}`, http.StatusBadRequest)
+		return
+	}
+
+	// ✅ Validate required fields
+	if message.MatchID == "" || message.SenderID == "" || message.Content == "" {
+		http.Error(w, `{"error": "Missing required fields: matchId, senderId, or content"}`, http.StatusBadRequest)
+		return
+	}
+
+	// ✅ Generate a unique message ID if not provided
+	if message.MessageID == "" {
+		message.MessageID = uuid.New().String()
+	}
+
+	// ✅ Set createdAt timestamp
+	message.CreatedAt = time.Now().Format(time.RFC3339)
+
+	// ✅ Set `isUnread` to "true" by default
+	message.SetIsUnread(true)
+
+	log.Printf("📩 Received message request: %+v", message)
+
+	// ✅ Save message to DynamoDB using the existing SendMessage function
+	err := c.ChatService.SendMessage(context.TODO(), message)
+	if err != nil {
+		log.Printf("❌ Failed to send message: %v", err)
+		http.Error(w, `{"error": "Failed to send message"}`, http.StatusInternalServerError)
+		return
+	}
+
+	// ✅ Send success response
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{
+		"status":  "success",
+		"message": "Message sent successfully",
+	})
 }
