@@ -308,3 +308,38 @@ func (ds *DynamoService) QueryItemsWithIndex(
 	log.Printf("✅ Query successful. Retrieved %d items.", len(output.Items))
 	return output.Items, nil
 }
+
+// QueryItemsWithOptions queries DynamoDB with sorting and limit options
+func (ds *DynamoService) QueryItemsWithOptions(
+	ctx context.Context,
+	tableName string,
+	keyConditionExpression string,
+	expressionAttributeValues map[string]types.AttributeValue,
+	expressionAttributeNames map[string]string,
+	limit int32,
+	latestFirst bool, // ✅ true = latest messages first, false = oldest messages first
+) ([]map[string]types.AttributeValue, error) {
+	log.Printf("🔍 Querying table '%s' with sorting: %v, limit: %d", tableName, latestFirst, limit)
+
+	// ✅ Set ScanIndexForward: false (latest messages first)
+	scanIndexForward := latestFirst == false // false = descending order (latest first)
+
+	queryInput := &dynamodb.QueryInput{
+		TableName:                 &tableName,
+		KeyConditionExpression:    &keyConditionExpression,
+		ExpressionAttributeValues: expressionAttributeValues,
+		ExpressionAttributeNames:  expressionAttributeNames,
+		Limit:                     &limit,
+		ScanIndexForward:          &scanIndexForward, // ✅ Sorting applied
+	}
+
+	// ✅ Execute query
+	output, err := ds.Client.Query(ctx, queryInput)
+	if err != nil {
+		log.Printf("❌ Failed to query DynamoDB table '%s': %v", tableName, err)
+		return nil, fmt.Errorf("failed to query table '%s': %w", tableName, err)
+	}
+
+	log.Printf("✅ Retrieved %d items from table '%s'", len(output.Items), tableName)
+	return output.Items, nil
+}

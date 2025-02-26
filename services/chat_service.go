@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"sort"
-	"strings"
 	"vibin_server/models"
 
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
@@ -17,11 +16,11 @@ type ChatService struct {
 	Dynamo *DynamoService
 }
 
-// GetMessagesByMatchID fetches messages for a given matchId sorted by createdAt
+// GetMessagesByMatchID fetches the latest messages for a given matchId sorted by createdAt (latest first)
 func (s *ChatService) GetMessagesByMatchID(ctx context.Context, matchID string, limit int) ([]models.Message, error) {
-	log.Printf("🔍 Fetching messages for matchId: %s, Limit: %d", matchID, limit)
+	log.Printf("🔍 Fetching latest %d messages for matchId: %s", limit, matchID)
 
-	// ✅ Define the key condition expression
+	// ✅ Define key condition expression for filtering by matchId
 	keyCondition := "#matchId = :matchId"
 	expressionValues := map[string]types.AttributeValue{
 		":matchId": &types.AttributeValueMemberS{Value: matchID},
@@ -30,11 +29,8 @@ func (s *ChatService) GetMessagesByMatchID(ctx context.Context, matchID string, 
 		"#matchId": "matchId", // ✅ Prevents DynamoDB reserved word conflicts
 	}
 
-	// ✅ Convert `limit` from `int` to `int32`
-	limitInt32 := int32(limit)
-
-	// ✅ Query DynamoDB (Fixed argument count)
-	items, err := s.Dynamo.QueryItems(ctx, models.MessagesTable, keyCondition, expressionValues, expressionNames, limitInt32)
+	// ✅ Query DynamoDB (Retrieve latest messages first)
+	items, err := s.Dynamo.QueryItemsWithOptions(ctx, models.MessagesTable, keyCondition, expressionValues, expressionNames, int32(limit), false)
 	if err != nil {
 		log.Printf("❌ Error querying messages: %v", err)
 		return nil, fmt.Errorf("failed to fetch messages: %w", err)
@@ -48,16 +44,10 @@ func (s *ChatService) GetMessagesByMatchID(ctx context.Context, matchID string, 
 		return nil, fmt.Errorf("failed to parse messages: %w", err)
 	}
 
-	// ✅ Sort results manually (since DynamoDB doesn't provide order directly)
-	// Sorting in descending order (newest first)
+	// ✅ Sort results manually to ensure newest messages first
 	sort.SliceStable(messages, func(i, j int) bool {
 		return messages[i].CreatedAt > messages[j].CreatedAt
 	})
-
-	// ✅ Convert `isUnread` to lowercase for consistency
-	for i, msg := range messages {
-		messages[i].IsUnread = strings.ToLower(msg.IsUnread) // Ensure "True" -> "true"
-	}
 
 	log.Printf("✅ Found %d messages for matchId: %s", len(messages), matchID)
 	return messages, nil

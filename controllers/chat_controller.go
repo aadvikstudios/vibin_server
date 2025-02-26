@@ -23,7 +23,7 @@ func NewChatController(service *services.ChatService) *ChatController {
 	return &ChatController{ChatService: service}
 }
 
-// HandleGetMessages - Fetch messages based on matchId
+// HandleGetMessages - Fetch latest messages based on matchId and limit
 func (c *ChatController) HandleGetMessages(w http.ResponseWriter, r *http.Request) {
 	// ✅ Parse query parameters
 	matchID := r.URL.Query().Get("matchId")
@@ -41,7 +41,7 @@ func (c *ChatController) HandleGetMessages(w http.ResponseWriter, r *http.Reques
 		limit = 50 // Default to 50 messages
 	}
 
-	log.Printf("🔍 Fetching messages for matchId: %s, Limit: %d", matchID, limit)
+	log.Printf("🔍 Fetching latest %d messages for matchId: %s", limit, matchID)
 
 	// ✅ Fetch messages
 	messages, err := c.ChatService.GetMessagesByMatchID(context.TODO(), matchID, limit)
