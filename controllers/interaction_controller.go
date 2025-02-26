@@ -115,7 +115,7 @@ func (c *InteractionController) HandleApprovePing(w http.ResponseWriter, r *http
 	}
 
 	// ✅ Step 2: Update interaction status to "approved"
-	if err := c.InteractionService.UpdateInteractionStatus(ctx, request.SenderHandle, request.ReceiverHandle, "approved"); err != nil {
+	if err := c.InteractionService.UpdateInteractionStatus(ctx, request.SenderHandle, request.ReceiverHandle, "approved", "ping"); err != nil {
 		log.Printf("❌ Failed to update interaction status: %v", err)
 		http.Error(w, `{"error": "Failed to approve ping"}`, http.StatusInternalServerError)
 		return
@@ -151,7 +151,7 @@ func (c *InteractionController) HandleDeclinePing(w http.ResponseWriter, r *http
 	log.Printf("❌ %s declined ping from %s", request.ReceiverHandle, request.SenderHandle)
 
 	// ✅ Update interaction status from "pending" to "declined"
-	err := c.InteractionService.UpdateInteractionStatus(context.TODO(), request.SenderHandle, request.ReceiverHandle, "declined")
+	err := c.InteractionService.UpdateInteractionStatus(context.TODO(), request.SenderHandle, request.ReceiverHandle, "declined", "ping")
 	if err != nil {
 		http.Error(w, `{"error": "Failed to decline ping"}`, http.StatusInternalServerError)
 		return

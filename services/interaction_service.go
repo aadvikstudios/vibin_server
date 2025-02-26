@@ -55,8 +55,28 @@ func (s *InteractionService) SaveInteraction(ctx context.Context, senderHandle, 
 			return nil
 		}
 		if isMatch {
-			return s.HandleMatch(ctx, senderHandle, receiverHandle, "")
+			return s.HandleMatchWithUpdate(ctx, senderHandle, receiverHandle, "")
 		}
+	}
+
+	return nil
+}
+
+// HandleMatchWithUpdate updates interaction statuses, creates a match, and inserts a message
+func (s *InteractionService) HandleMatchWithUpdate(ctx context.Context, user1, user2, message string) error {
+	log.Printf("🎉 Creating match between %s ❤️ %s", user1, user2)
+
+	// Update interaction statuses
+	if err := s.UpdateInteractionStatus(ctx, user1, user2, "match", "like"); err != nil {
+		log.Printf("⚠️ Error updating status for %s -> %s: %v", user1, user2, err)
+	}
+	if err := s.UpdateInteractionStatus(ctx, user2, user1, "match", "like"); err != nil {
+		log.Printf("⚠️ Error updating status for %s -> %s: %v", user2, user1, err)
+	}
+
+	err := s.HandleMatch(ctx, user1, user2, message)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -65,14 +85,6 @@ func (s *InteractionService) SaveInteraction(ctx context.Context, senderHandle, 
 // HandleMatch updates interaction statuses, creates a match, and inserts a message
 func (s *InteractionService) HandleMatch(ctx context.Context, user1, user2, message string) error {
 	log.Printf("🎉 Creating match between %s ❤️ %s", user1, user2)
-
-	// Update interaction statuses
-	if err := s.UpdateInteractionStatus(ctx, user1, user2, "match"); err != nil {
-		log.Printf("⚠️ Error updating status for %s -> %s: %v", user1, user2, err)
-	}
-	if err := s.UpdateInteractionStatus(ctx, user2, user1, "match"); err != nil {
-		log.Printf("⚠️ Error updating status for %s -> %s: %v", user2, user1, err)
-	}
 
 	// Create match entry
 	matchID, err := s.CreateMatch(ctx, user1, user2)
@@ -89,13 +101,24 @@ func (s *InteractionService) HandleMatch(ctx context.Context, user1, user2, mess
 }
 
 // UpdateInteractionStatus ensures an existing record is updated instead of inserting a new one
-func (s *InteractionService) UpdateInteractionStatus(ctx context.Context, senderHandle, receiverHandle, newStatus string) error {
-	log.Printf("🔄 Updating interaction status to '%s' for %s -> %s", newStatus, senderHandle, receiverHandle)
+func (s *InteractionService) UpdateInteractionStatus(ctx context.Context, senderHandle, receiverHandle, newStatus, action string) error {
+	log.Printf("🔄 Updating interaction status to '%s' for %s -> %s (Action: %s)", newStatus, senderHandle, receiverHandle, action)
+
+	// Determine the correct SortKey based on action type
+	var sortKey string
+	if action == "like" {
+		sortKey = senderHandle + "#like"
+	} else if action == "ping" {
+		sortKey = senderHandle + "#ping"
+	} else {
+		log.Printf("⚠️ Unsupported action type: %s", action)
+		return fmt.Errorf("unsupported action type: %s", action)
+	}
 
 	// Define key for updating the existing interaction record
 	key := map[string]types.AttributeValue{
 		"receiverHandle": &types.AttributeValueMemberS{Value: receiverHandle},
-		"sk":             &types.AttributeValueMemberS{Value: senderHandle + "#like"},
+		"sk":             &types.AttributeValueMemberS{Value: sortKey}, // ✅ Uses dynamically assigned sortKey
 	}
 
 	// Define the update expression
@@ -114,7 +137,7 @@ func (s *InteractionService) UpdateInteractionStatus(ctx context.Context, sender
 		return fmt.Errorf("failed to update interaction status: %w", err)
 	}
 
-	log.Printf("✅ Successfully updated interaction status to '%s' for %s -> %s", newStatus, senderHandle, receiverHandle)
+	log.Printf("✅ Successfully updated interaction status to '%s' for %s -> %s (SortKey: %s)", newStatus, senderHandle, receiverHandle, sortKey)
 	return nil
 }
 
