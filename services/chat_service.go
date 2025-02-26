@@ -140,13 +140,13 @@ func (s *ChatService) MarkMessagesAsRead(ctx context.Context, matchID string, us
 }
 
 // UpdateMessageLikeStatus - Updates the `liked` status of a message
-func (s *ChatService) UpdateMessageLikeStatus(ctx context.Context, matchID string, messageID string, liked bool) error {
-	log.Printf("💖 Updating like status for MessageID: %s in MatchID: %s to %v", messageID, matchID, liked)
+func (s *ChatService) UpdateMessageLikeStatus(ctx context.Context, matchID string, createdAt string, liked bool) error {
+	log.Printf("💖 Updating like status for Message at %s in MatchID: %s to %v", createdAt, matchID, liked)
 
 	// ✅ Define the update key (Primary Key: matchId, Sort Key: createdAt)
 	key := map[string]types.AttributeValue{
 		"matchId":   &types.AttributeValueMemberS{Value: matchID},
-		"messageId": &types.AttributeValueMemberS{Value: messageID},
+		"createdAt": &types.AttributeValueMemberS{Value: createdAt}, // ✅ Correct Sort Key
 	}
 
 	// ✅ Update Expression
@@ -162,6 +162,6 @@ func (s *ChatService) UpdateMessageLikeStatus(ctx context.Context, matchID strin
 		return fmt.Errorf("failed to update like status: %w", err)
 	}
 
-	log.Printf("✅ Successfully updated like status for MessageID: %s", messageID)
+	log.Printf("✅ Successfully updated like status for message at %s", createdAt)
 	return nil
 }

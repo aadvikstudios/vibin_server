@@ -130,7 +130,7 @@ func (c *ChatController) HandleSendMessage(w http.ResponseWriter, r *http.Reques
 func (c *ChatController) HandleLikeMessage(w http.ResponseWriter, r *http.Request) {
 	var request struct {
 		MatchID   string `json:"matchId"`
-		MessageID string `json:"messageId"`
+		CreatedAt string `json:"createdAt"` // ✅ Use `createdAt` instead of `messageId`
 		Liked     bool   `json:"liked"`
 	}
 
@@ -141,15 +141,15 @@ func (c *ChatController) HandleLikeMessage(w http.ResponseWriter, r *http.Reques
 	}
 
 	// ✅ Validate required fields
-	if request.MatchID == "" || request.MessageID == "" {
-		http.Error(w, `{"error": "Missing required fields: matchId, messageId"}`, http.StatusBadRequest)
+	if request.MatchID == "" || request.CreatedAt == "" {
+		http.Error(w, `{"error": "Missing required fields: matchId, createdAt"}`, http.StatusBadRequest)
 		return
 	}
 
-	log.Printf("💖 Updating like status for MessageID: %s in MatchID: %s to %v", request.MessageID, request.MatchID, request.Liked)
+	log.Printf("💖 Updating like status for message at %s in MatchID: %s to %v", request.CreatedAt, request.MatchID, request.Liked)
 
 	// ✅ Call the service to update the like status
-	err := c.ChatService.UpdateMessageLikeStatus(context.TODO(), request.MatchID, request.MessageID, request.Liked)
+	err := c.ChatService.UpdateMessageLikeStatus(context.TODO(), request.MatchID, request.CreatedAt, request.Liked)
 	if err != nil {
 		log.Printf("❌ Failed to update like status: %v", err)
 		http.Error(w, `{"error": "Failed to update like status"}`, http.StatusInternalServerError)
