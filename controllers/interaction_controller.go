@@ -107,25 +107,24 @@ func (c *InteractionController) HandleApprovePing(w http.ResponseWriter, r *http
 
 	ctx := context.TODO()
 
-	// ✅ Step 1: Update interaction status to "approved"
+	// ✅ Step 1: Fetch the original ping message from the interaction table
+	originalMessage, err := c.InteractionService.GetPingMessage(ctx, request.SenderHandle, request.ReceiverHandle)
+	if err != nil {
+		log.Printf("⚠️ Failed to fetch original ping message: %v", err)
+		originalMessage = "" // Use an empty message if fetching fails
+	}
+
+	// ✅ Step 2: Update interaction status to "approved"
 	if err := c.InteractionService.UpdateInteractionStatus(ctx, request.SenderHandle, request.ReceiverHandle, "approved"); err != nil {
 		log.Printf("❌ Failed to update interaction status: %v", err)
 		http.Error(w, `{"error": "Failed to approve ping"}`, http.StatusInternalServerError)
 		return
 	}
 
-	// ✅ Step 2: Create a match entry
-	matchID, err := c.InteractionService.CreateMatch(ctx, request.SenderHandle, request.ReceiverHandle)
-	if err != nil {
-		log.Printf("❌ Failed to create match: %v", err)
+	// ✅ Step 3: Create a match and insert the original ping message
+	if err := c.InteractionService.HandleMatch(ctx, request.SenderHandle, request.ReceiverHandle, originalMessage); err != nil {
+		log.Printf("❌ Failed to handle match creation: %v", err)
 		http.Error(w, `{"error": "Failed to create match"}`, http.StatusInternalServerError)
-		return
-	}
-
-	// ✅ Step 3: Send an initial welcome message in Messages table
-	if err := c.InteractionService.SendInitialMessage(ctx, matchID, request.SenderHandle, request.ReceiverHandle); err != nil {
-		log.Printf("❌ Failed to send initial message: %v", err)
-		http.Error(w, `{"error": "Failed to send initial message"}`, http.StatusInternalServerError)
 		return
 	}
 
