@@ -31,7 +31,7 @@ func (c *MatchController) HandleGetMatches(w http.ResponseWriter, r *http.Reques
 
 	log.Printf("🔍 Fetching matches for user: %s", request.UserHandle)
 
-	// Fetch matches from DynamoDB
+	// Fetch matches with profile data
 	matches, err := c.MatchService.GetMatchesByUserHandle(context.TODO(), request.UserHandle)
 	if err != nil {
 		http.Error(w, `{"error": "Failed to fetch matches"}`, http.StatusInternalServerError)
