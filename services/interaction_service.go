@@ -17,12 +17,11 @@ type InteractionService struct {
 	Dynamo *DynamoService
 }
 
-// SaveInteraction - Store like, dislike, or ping interaction
 func (s *InteractionService) SaveInteraction(ctx context.Context, senderHandle, receiverHandle, interactionType, message string) error {
-	// Ensure Sort Key is properly formatted
-	sortKey := senderHandle + "#" + interactionType // ✅ Fix: Ensure SK is always non-empty
+	// ✅ Ensure Sort Key is properly formatted
+	sortKey := senderHandle + "#" + interactionType
 
-	// Create Interaction Record
+	// ✅ Create Interaction Record
 	interaction := models.Interaction{
 		ReceiverHandle: receiverHandle, // ✅ Partition Key (PK)
 		SortKey:        sortKey,        // ✅ Sort Key (senderHandle#type)
@@ -48,6 +47,34 @@ func (s *InteractionService) SaveInteraction(ctx context.Context, senderHandle, 
 	}
 
 	log.Printf("✅ Interaction recorded: %s -> %s (%s)", senderHandle, receiverHandle, interactionType)
+
+	// ✅ Check if it's a mutual like (Potential Match)
+	if interactionType == "like" {
+		isMatch, err := s.IsMatch(ctx, senderHandle, receiverHandle)
+		if err != nil {
+			log.Printf("⚠️ Error checking for match: %v", err)
+			return nil // Don't fail if match check fails
+		}
+
+		if isMatch {
+			log.Printf("🎉 It's a MATCH! %s ❤️ %s", senderHandle, receiverHandle)
+
+			// ✅ Update the interaction status from "pending" to "match"
+			err := s.UpdateInteractionStatus(ctx, senderHandle, receiverHandle, "match")
+			if err != nil {
+				log.Printf("⚠️ Error updating interaction status: %v", err)
+			}
+
+			err = s.UpdateInteractionStatus(ctx, receiverHandle, senderHandle, "match")
+			if err != nil {
+				log.Printf("⚠️ Error updating interaction status for receiver's entry: %v", err)
+			}
+
+			// ✅ Create match entry
+			return s.CreateMatch(ctx, senderHandle, receiverHandle)
+		}
+	}
+
 	return nil
 }
 
@@ -89,11 +116,11 @@ func (s *InteractionService) HasUserLiked(ctx context.Context, receiverHandle, s
 	return false, nil
 }
 
-// ✅ Optimized `IsMatch` function to check if both users liked each other
+// ✅ Check if two users have mutually liked each other
 func (s *InteractionService) IsMatch(ctx context.Context, senderHandle, receiverHandle string) (bool, error) {
 	log.Printf("🔍 Checking match status for %s and %s", senderHandle, receiverHandle)
 
-	// ✅ Check if receiver has liked the sender
+	// ✅ Check if receiver has already liked the sender
 	hasReceiverLiked, err := s.HasUserLiked(ctx, receiverHandle, senderHandle)
 	if err != nil {
 		log.Printf("❌ Error checking if %s liked %s: %v", receiverHandle, senderHandle, err)
@@ -110,7 +137,7 @@ func (s *InteractionService) IsMatch(ctx context.Context, senderHandle, receiver
 	return false, nil
 }
 
-// ✅ CreateMatch function creates a match when both users like each other
+// ✅ Create a match when both users like each other
 func (s *InteractionService) CreateMatch(ctx context.Context, user1, user2 string) error {
 	matchID := uuid.New().String()
 	createdAt := time.Now().Format(time.RFC3339)
@@ -123,12 +150,43 @@ func (s *InteractionService) CreateMatch(ctx context.Context, user1, user2 strin
 		CreatedAt:   createdAt,
 	}
 
+	// ✅ Save match in DynamoDB
 	err := s.Dynamo.PutItem(ctx, models.MatchesTable, match)
 	if err != nil {
 		return fmt.Errorf("failed to create match: %w", err)
 	}
 
 	log.Printf("🎉 Match created: %s ❤️ %s", user1, user2)
+	return nil
+}
+
+// ✅ Update interaction status in DynamoDB
+func (s *InteractionService) UpdateInteractionStatus(ctx context.Context, senderHandle, receiverHandle, newStatus string) error {
+	log.Printf("🔄 Updating interaction status to '%s' for %s -> %s", newStatus, senderHandle, receiverHandle)
+
+	// ✅ Define Key (PK and SK)
+	key := map[string]types.AttributeValue{
+		"receiverHandle": &types.AttributeValueMemberS{Value: receiverHandle},
+		"sk":             &types.AttributeValueMemberS{Value: senderHandle + "#like"},
+	}
+
+	// ✅ Define Update Expression
+	updateExpression := "SET #status = :status"
+	expressionValues := map[string]types.AttributeValue{
+		":status": &types.AttributeValueMemberS{Value: newStatus},
+	}
+	expressionNames := map[string]string{
+		"#status": "status",
+	}
+
+	// ✅ Correctly handle the two return values from UpdateItem
+	_, err := s.Dynamo.UpdateItem(ctx, models.InteractionsTable, updateExpression, key, expressionValues, expressionNames)
+	if err != nil {
+		log.Printf("❌ Error updating interaction status: %v", err)
+		return fmt.Errorf("failed to update interaction status: %w", err)
+	}
+
+	log.Printf("✅ Successfully updated interaction status to '%s' for %s -> %s", newStatus, senderHandle, receiverHandle)
 	return nil
 }
 
