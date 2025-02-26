@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"sort"
 	"vibin_server/models"
 
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
@@ -16,7 +15,8 @@ type ChatService struct {
 	Dynamo *DynamoService
 }
 
-// GetMessagesByMatchID fetches the latest messages for a given matchId sorted by createdAt (latest first)
+// GetMessagesByMatchID fetches the latest messages for a given matchId sorted by createdAt (latest first),
+// then reverses the order before returning, so the latest message appears at the bottom in UI.
 func (s *ChatService) GetMessagesByMatchID(ctx context.Context, matchID string, limit int) ([]models.Message, error) {
 	log.Printf("🔍 Fetching latest %d messages for matchId: %s", limit, matchID)
 
@@ -30,7 +30,7 @@ func (s *ChatService) GetMessagesByMatchID(ctx context.Context, matchID string, 
 	}
 
 	// ✅ Query DynamoDB (Retrieve latest messages first)
-	items, err := s.Dynamo.QueryItemsWithOptions(ctx, models.MessagesTable, keyCondition, expressionValues, expressionNames, int32(limit), false)
+	items, err := s.Dynamo.QueryItemsWithOptions(ctx, models.MessagesTable, keyCondition, expressionValues, expressionNames, int32(limit), true)
 	if err != nil {
 		log.Printf("❌ Error querying messages: %v", err)
 		return nil, fmt.Errorf("failed to fetch messages: %w", err)
@@ -44,12 +44,12 @@ func (s *ChatService) GetMessagesByMatchID(ctx context.Context, matchID string, 
 		return nil, fmt.Errorf("failed to parse messages: %w", err)
 	}
 
-	// ✅ Sort results manually to ensure newest messages first
-	sort.SliceStable(messages, func(i, j int) bool {
-		return messages[i].CreatedAt > messages[j].CreatedAt
-	})
+	// ✅ Reverse the messages so latest appears at the bottom in UI
+	for i, j := 0, len(messages)-1; i < j; i, j = i+1, j-1 {
+		messages[i], messages[j] = messages[j], messages[i]
+	}
 
-	log.Printf("✅ Found %d messages for matchId: %s", len(messages), matchID)
+	log.Printf("✅ Found %d messages for matchId: %s, returning in UI-friendly order", len(messages), matchID)
 	return messages, nil
 }
 
