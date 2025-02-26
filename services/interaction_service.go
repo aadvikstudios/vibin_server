@@ -19,27 +19,35 @@ type InteractionService struct {
 
 // SaveInteraction - Store like, dislike, or ping interaction
 func (s *InteractionService) SaveInteraction(ctx context.Context, senderHandle, receiverHandle, interactionType, message string) error {
-	createdAt := time.Now().Format(time.RFC3339)
+	// Ensure Sort Key is properly formatted
+	sortKey := senderHandle + "#" + interactionType // ✅ Fix: Ensure SK is always non-empty
 
+	// Create Interaction Record
 	interaction := models.Interaction{
-		ReceiverHandle: receiverHandle,
+		ReceiverHandle: receiverHandle, // ✅ Partition Key (PK)
+		SortKey:        sortKey,        // ✅ Sort Key (senderHandle#type)
 		SenderHandle:   senderHandle,
 		Type:           interactionType,
 		Status:         "pending",
-		CreatedAt:      createdAt,
+		CreatedAt:      time.Now().Format(time.RFC3339),
 	}
 
+	// ✅ Add message only for pings
 	if interactionType == "ping" && message != "" {
 		interaction.Message = &message
 	}
 
+	// ✅ Log before inserting
+	log.Printf("📥 Saving interaction: %+v", interaction)
+
+	// ✅ Save the interaction in DynamoDB
 	err := s.Dynamo.PutItem(ctx, models.InteractionsTable, interaction)
 	if err != nil {
 		log.Printf("❌ Failed to save interaction: %v", err)
-		return err
+		return fmt.Errorf("failed to put item in table 'Interactions': %w", err)
 	}
 
-	log.Printf("✅ Interaction saved: %s -> %s (%s)", senderHandle, receiverHandle, interactionType)
+	log.Printf("✅ Interaction recorded: %s -> %s (%s)", senderHandle, receiverHandle, interactionType)
 	return nil
 }
 
