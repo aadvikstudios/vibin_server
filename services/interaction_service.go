@@ -215,9 +215,9 @@ func (s *InteractionService) CreateMatch(ctx context.Context, user1, user2 strin
 	return matchID, nil
 }
 
-// SendInitialMessage sends a message when a match is created
 func (s *InteractionService) SendInitialMessage(ctx context.Context, matchID, senderHandle, receiverHandle, message string) error {
 	messageID := uuid.New().String()
+	createdAt := time.Now().Format(time.RFC3339)
 
 	// If no message was provided (mutual like case), use a default message
 	if message == "" {
@@ -229,9 +229,9 @@ func (s *InteractionService) SendInitialMessage(ctx context.Context, matchID, se
 		MessageID: messageID,
 		SenderID:  senderHandle,
 		Content:   message,
-		IsUnread:  true,
+		IsUnread:  "true", // ✅ Store as string "true"
 		Liked:     false,
-		CreatedAt: time.Now().Format(time.RFC3339),
+		CreatedAt: createdAt,
 	}
 
 	if err := s.Dynamo.PutItem(ctx, models.MessagesTable, newMessage); err != nil {
