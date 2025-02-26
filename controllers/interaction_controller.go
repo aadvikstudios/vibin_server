@@ -129,15 +129,15 @@ func (c *InteractionController) HandlePingUser(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	log.Printf("📩 %s sent a ping to %s", request.SenderHandle, request.ReceiverHandle)
+	log.Printf("📩 %s sent a ping to %s: %s", request.SenderHandle, request.ReceiverHandle, request.Message)
 
 	// Save ping interaction
 	err := c.InteractionService.SaveInteraction(
 		context.TODO(),
 		request.SenderHandle,
 		request.ReceiverHandle,
-		"ping", // ✅ Use "ping" as the interaction type
-		request.Message,
+		"ping",          // ✅ Use "ping" as the interaction type
+		request.Message, // ✅ Save the custom message
 	)
 	if err != nil {
 		http.Error(w, `{"error": "Failed to send ping"}`, http.StatusInternalServerError)
