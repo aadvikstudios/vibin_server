@@ -15,4 +15,5 @@ func RegisterChatRoutes(r *mux.Router, chatService *services.ChatService) {
 	chatRouter.HandleFunc("/message", controller.HandleSendMessage).Methods("POST")                      // ✅ Send message
 	chatRouter.HandleFunc("/messages", controller.HandleGetMessages).Methods("GET")                      // ✅ Get messages
 	chatRouter.HandleFunc("/messages/mark-as-read", controller.HandleMarkMessagesAsRead).Methods("POST") // ✅ Mark messages as read
+	chatRouter.HandleFunc("/messages/like", controller.HandleLikeMessage).Methods("POST")                // ✅ Like/Unlike a message
 }

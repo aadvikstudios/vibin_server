@@ -126,3 +126,41 @@ func (c *ChatController) HandleSendMessage(w http.ResponseWriter, r *http.Reques
 		"message": "Message sent successfully",
 	})
 }
+
+func (c *ChatController) HandleLikeMessage(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		MatchID   string `json:"matchId"`
+		MessageID string `json:"messageId"`
+		Liked     bool   `json:"liked"`
+	}
+
+	// Decode request body
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		http.Error(w, `{"error": "Invalid request body"}`, http.StatusBadRequest)
+		return
+	}
+
+	// ✅ Validate required fields
+	if request.MatchID == "" || request.MessageID == "" {
+		http.Error(w, `{"error": "Missing required fields: matchId, messageId"}`, http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("💖 Updating like status for MessageID: %s in MatchID: %s to %v", request.MessageID, request.MatchID, request.Liked)
+
+	// ✅ Call the service to update the like status
+	err := c.ChatService.UpdateMessageLikeStatus(context.TODO(), request.MatchID, request.MessageID, request.Liked)
+	if err != nil {
+		log.Printf("❌ Failed to update like status: %v", err)
+		http.Error(w, `{"error": "Failed to update like status"}`, http.StatusInternalServerError)
+		return
+	}
+
+	// ✅ Send success response
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{
+		"status":  "success",
+		"message": "Like status updated successfully",
+	})
+}

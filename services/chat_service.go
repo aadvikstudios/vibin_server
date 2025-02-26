@@ -138,3 +138,30 @@ func (s *ChatService) MarkMessagesAsRead(ctx context.Context, matchID string, us
 	log.Printf("✅ Successfully marked %d messages as read for matchId: %s where receiver is %s", len(messagesToUpdate), matchID, userHandle)
 	return nil
 }
+
+// UpdateMessageLikeStatus - Updates the `liked` status of a message
+func (s *ChatService) UpdateMessageLikeStatus(ctx context.Context, matchID string, messageID string, liked bool) error {
+	log.Printf("💖 Updating like status for MessageID: %s in MatchID: %s to %v", messageID, matchID, liked)
+
+	// ✅ Define the update key (Primary Key: matchId, Sort Key: createdAt)
+	key := map[string]types.AttributeValue{
+		"matchId":   &types.AttributeValueMemberS{Value: matchID},
+		"messageId": &types.AttributeValueMemberS{Value: messageID},
+	}
+
+	// ✅ Update Expression
+	updateExpression := "SET liked = :liked"
+	expressionValues := map[string]types.AttributeValue{
+		":liked": &types.AttributeValueMemberBOOL{Value: liked}, // ✅ Boolean type in DynamoDB
+	}
+
+	// ✅ Perform the update
+	_, err := s.Dynamo.UpdateItem(ctx, models.MessagesTable, updateExpression, key, expressionValues, nil)
+	if err != nil {
+		log.Printf("❌ Failed to update like status: %v", err)
+		return fmt.Errorf("failed to update like status: %w", err)
+	}
+
+	log.Printf("✅ Successfully updated like status for MessageID: %s", messageID)
+	return nil
+}
