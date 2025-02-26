@@ -17,8 +17,8 @@ type InteractionService struct {
 	Dynamo *DynamoService
 }
 
-// ✅ SaveInteraction now ensures the correct keys are used for indexing
-func (s *InteractionService) SaveInteraction(ctx context.Context, senderHandle, receiverHandle, interactionType string) error {
+// ✅ Updated SaveInteraction to accept a message parameter
+func (s *InteractionService) SaveInteraction(ctx context.Context, senderHandle, receiverHandle, interactionType, message string) error {
 	createdAt := time.Now().Format(time.RFC3339)
 
 	interaction := models.Interaction{
@@ -27,6 +27,11 @@ func (s *InteractionService) SaveInteraction(ctx context.Context, senderHandle, 
 		Type:           interactionType,
 		Status:         "pending",
 		CreatedAt:      createdAt,
+	}
+
+	// ✅ Only add message if it's a "ping"
+	if interactionType == "ping" && message != "" {
+		interaction.Message = message
 	}
 
 	// ✅ Save the interaction in DynamoDB

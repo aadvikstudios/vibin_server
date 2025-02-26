@@ -34,7 +34,7 @@ func (c *InteractionController) HandleLikeUser(w http.ResponseWriter, r *http.Re
 	log.Printf("💖 %s liked %s", request.SenderHandle, request.ReceiverHandle)
 
 	// Save like interaction
-	err := c.InteractionService.SaveInteraction(context.TODO(), request.SenderHandle, request.ReceiverHandle, "like")
+	err := c.InteractionService.SaveInteraction(context.TODO(), request.SenderHandle, request.ReceiverHandle, "like", "")
 	if err != nil {
 		http.Error(w, `{"error": "Failed to like user"}`, http.StatusInternalServerError)
 		return
@@ -77,7 +77,7 @@ func (c *InteractionController) HandleDislikeUser(w http.ResponseWriter, r *http
 	log.Printf("💔 %s disliked %s", request.SenderHandle, request.ReceiverHandle)
 
 	// Save dislike interaction
-	err := c.InteractionService.SaveInteraction(context.TODO(), request.SenderHandle, request.ReceiverHandle, "dislike")
+	err := c.InteractionService.SaveInteraction(context.TODO(), request.SenderHandle, request.ReceiverHandle, "dislike", "")
 	if err != nil {
 		http.Error(w, `{"error": "Failed to dislike user"}`, http.StatusInternalServerError)
 		return
@@ -113,4 +113,38 @@ func (c *InteractionController) HandleGetInteractions(w http.ResponseWriter, r *
 	// Send JSON response
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(interactions)
+}
+
+// HandlePingUser processes a ping request
+func (c *InteractionController) HandlePingUser(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		SenderHandle   string `json:"senderHandle"`
+		ReceiverHandle string `json:"receiverHandle"`
+		Message        string `json:"message,omitempty"` // ✅ Optional custom ping message
+	}
+
+	// Parse request body
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		http.Error(w, `{"error": "Invalid request body"}`, http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("📩 %s sent a ping to %s", request.SenderHandle, request.ReceiverHandle)
+
+	// Save ping interaction
+	err := c.InteractionService.SaveInteraction(
+		context.TODO(),
+		request.SenderHandle,
+		request.ReceiverHandle,
+		"ping", // ✅ Use "ping" as the interaction type
+		request.Message,
+	)
+	if err != nil {
+		http.Error(w, `{"error": "Failed to send ping"}`, http.StatusInternalServerError)
+		return
+	}
+
+	// Send success response
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "success", "message": "Ping sent successfully"})
 }
