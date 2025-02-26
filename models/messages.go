@@ -2,6 +2,7 @@ package models
 
 import "strings"
 
+// Message represents a chat message stored in DynamoDB
 type Message struct {
 	MatchID   string `dynamodbav:"matchId" json:"matchId"`
 	CreatedAt string `dynamodbav:"createdAt" json:"createdAt"`
@@ -10,6 +11,7 @@ type Message struct {
 	Liked     bool   `dynamodbav:"liked" json:"liked"`
 	MessageID string `dynamodbav:"messageId" json:"messageId"`
 	SenderID  string `dynamodbav:"senderId" json:"senderId"`
+	ImageURL  string `dynamodbav:"imageUrl,omitempty" json:"imageUrl,omitempty"` // ✅ New Field for Image Messages
 }
 
 // MessagesTable is the DynamoDB table name
