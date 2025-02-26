@@ -23,7 +23,6 @@ func main() {
 
 	// Initialize Services
 	userProfileService := &services.UserProfileService{Dynamo: dynamoService}
-	actionService := &services.ActionService{Dynamo: dynamoService}
 	interactionService := &services.InteractionService{Dynamo: dynamoService}
 
 	chatService := &services.ChatService{Dynamo: dynamoService}
@@ -54,7 +53,6 @@ func main() {
 
 	// Register routes
 	routes.RegisterUserProfileRoutes(r, userProfileService)
-	routes.RegisterActionRoutes(r, actionService)
 	routes.RegisterChatRoutes(r, chatService)
 	routes.RegisterMatchRoutes(r, matchService)
 	routes.RegisterPendingInviteRoutes(r, inviteService) // ✅ Added Invite Routes
