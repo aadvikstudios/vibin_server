@@ -85,33 +85,41 @@ func (s *ChatService) SendMessage(ctx context.Context, message models.Message) e
 func (s *ChatService) MarkMessagesAsRead(ctx context.Context, matchID string, userHandle string) error {
 	log.Printf("🔄 Marking messages as read for matchId: %s where receiver is %s", matchID, userHandle)
 
-	// ✅ Query messages where matchId matches AND sender is NOT the userHandle
-	keyCondition := "matchId = :matchId AND senderId <> :userHandle"
+	// ✅ Step 1: Query all messages for the given matchId
+	keyCondition := "matchId = :matchId"
 	expressionValues := map[string]types.AttributeValue{
-		":matchId":    &types.AttributeValueMemberS{Value: matchID},
-		":userHandle": &types.AttributeValueMemberS{Value: userHandle}, // ✅ Ensure we filter messages NOT sent by user
+		":matchId": &types.AttributeValueMemberS{Value: matchID},
 	}
 
-	// ✅ Fetch messages that need to be updated
+	// ✅ Fetch all messages
 	items, err := s.Dynamo.QueryItems(ctx, models.MessagesTable, keyCondition, expressionValues, nil, 100)
 	if err != nil {
 		log.Printf("❌ Error fetching messages: %v", err)
 		return fmt.Errorf("failed to fetch messages: %w", err)
 	}
 
-	// ✅ Batch update each message to set `isUnread` as "false"
+	// ✅ Step 2: Filter messages where the sender is NOT the requesting user
+	var messagesToUpdate []models.Message
 	for _, item := range items {
-		// Extract Message ID
-		messageIDAttr, exists := item["messageId"]
-		if !exists {
+		var message models.Message
+		err := attributevalue.UnmarshalMap(item, &message)
+		if err != nil {
+			log.Printf("⚠️ Warning: Failed to parse message: %v", err)
 			continue
 		}
-		messageID := messageIDAttr.(*types.AttributeValueMemberS).Value
 
+		// ✅ Only update messages that were NOT sent by the requesting user
+		if message.SenderID != userHandle && message.IsUnread == "true" {
+			messagesToUpdate = append(messagesToUpdate, message)
+		}
+	}
+
+	// ✅ Step 3: Batch update each message's `isUnread` status to "false"
+	for _, message := range messagesToUpdate {
 		// ✅ Define update key
 		key := map[string]types.AttributeValue{
-			"matchId":   &types.AttributeValueMemberS{Value: matchID},
-			"messageId": &types.AttributeValueMemberS{Value: messageID},
+			"matchId":   &types.AttributeValueMemberS{Value: message.MatchID},
+			"createdAt": &types.AttributeValueMemberS{Value: message.CreatedAt}, // ✅ Ensure we use the correct sort key
 		}
 
 		// ✅ Update Expression
@@ -123,10 +131,10 @@ func (s *ChatService) MarkMessagesAsRead(ctx context.Context, matchID string, us
 		// ✅ Perform update
 		_, err := s.Dynamo.UpdateItem(ctx, models.MessagesTable, updateExpression, key, expressionValues, nil)
 		if err != nil {
-			log.Printf("❌ Failed to update message %s: %v", messageID, err)
+			log.Printf("❌ Failed to update message %s: %v", message.MessageID, err)
 		}
 	}
 
-	log.Printf("✅ Successfully marked messages as read for matchId: %s where receiver is %s", matchID, userHandle)
+	log.Printf("✅ Successfully marked %d messages as read for matchId: %s where receiver is %s", len(messagesToUpdate), matchID, userHandle)
 	return nil
 }
