@@ -55,7 +55,6 @@ func (s *InteractionService) SaveInteraction(ctx context.Context, senderHandle, 
 			log.Printf("⚠️ Error checking for match: %v", err)
 			return nil // Don't fail if match check fails
 		}
-
 		if isMatch {
 			log.Printf("🎉 It's a MATCH! %s ❤️ %s", senderHandle, receiverHandle)
 
@@ -71,8 +70,12 @@ func (s *InteractionService) SaveInteraction(ctx context.Context, senderHandle, 
 			}
 
 			// ✅ Create match entry
-			return s.CreateMatch(ctx, senderHandle, receiverHandle)
+			_, err = s.CreateMatch(ctx, senderHandle, receiverHandle)
+			if err != nil {
+				return err
+			}
 		}
+
 	}
 
 	return nil
@@ -137,8 +140,8 @@ func (s *InteractionService) IsMatch(ctx context.Context, senderHandle, receiver
 	return false, nil
 }
 
-// ✅ Create a match when both users like each other
-func (s *InteractionService) CreateMatch(ctx context.Context, user1, user2 string) error {
+// CreateMatch - Stores a match in the Matches table and returns the MatchID
+func (s *InteractionService) CreateMatch(ctx context.Context, user1, user2 string) (string, error) {
 	matchID := uuid.New().String()
 	createdAt := time.Now().Format(time.RFC3339)
 
@@ -153,24 +156,51 @@ func (s *InteractionService) CreateMatch(ctx context.Context, user1, user2 strin
 	// ✅ Save match in DynamoDB
 	err := s.Dynamo.PutItem(ctx, models.MatchesTable, match)
 	if err != nil {
-		return fmt.Errorf("failed to create match: %w", err)
+		log.Printf("❌ Failed to create match: %v", err)
+		return "", fmt.Errorf("failed to create match: %w", err)
 	}
 
 	log.Printf("🎉 Match created: %s ❤️ %s", user1, user2)
+	return matchID, nil
+}
+
+// SendInitialMessage - Sends a default welcome message to start the chat
+func (s *InteractionService) SendInitialMessage(ctx context.Context, matchID, senderHandle, receiverHandle string) error {
+	messageID := uuid.New().String()
+	createdAt := time.Now().Format(time.RFC3339)
+
+	message := models.Message{
+		MatchID:   matchID,
+		MessageID: messageID,
+		SenderID:  senderHandle,
+		Content:   "Hey! You both matched! 🎉 Start a conversation now!",
+		IsUnread:  true,
+		Liked:     false,
+		CreatedAt: createdAt,
+	}
+
+	// ✅ Save message in DynamoDB
+	err := s.Dynamo.PutItem(ctx, models.MessagesTable, message)
+	if err != nil {
+		log.Printf("❌ Failed to send initial message: %v", err)
+		return fmt.Errorf("failed to send initial message: %w", err)
+	}
+
+	log.Printf("📩 Initial message sent for Match %s: %s", matchID, message.Content)
 	return nil
 }
 
-// ✅ Update interaction status in DynamoDB
+// UpdateInteractionStatus - Update the status of an interaction (like, ping, etc.)
 func (s *InteractionService) UpdateInteractionStatus(ctx context.Context, senderHandle, receiverHandle, newStatus string) error {
 	log.Printf("🔄 Updating interaction status to '%s' for %s -> %s", newStatus, senderHandle, receiverHandle)
 
-	// ✅ Define Key (PK and SK)
+	// Define Key (PK and SK)
 	key := map[string]types.AttributeValue{
 		"receiverHandle": &types.AttributeValueMemberS{Value: receiverHandle},
-		"sk":             &types.AttributeValueMemberS{Value: senderHandle + "#like"},
+		"sk":             &types.AttributeValueMemberS{Value: senderHandle + "#ping"}, // ✅ Ensure it updates a ping interaction
 	}
 
-	// ✅ Define Update Expression
+	// Define Update Expression
 	updateExpression := "SET #status = :status"
 	expressionValues := map[string]types.AttributeValue{
 		":status": &types.AttributeValueMemberS{Value: newStatus},
@@ -179,7 +209,7 @@ func (s *InteractionService) UpdateInteractionStatus(ctx context.Context, sender
 		"#status": "status",
 	}
 
-	// ✅ Correctly handle the two return values from UpdateItem
+	// Perform the update
 	_, err := s.Dynamo.UpdateItem(ctx, models.InteractionsTable, updateExpression, key, expressionValues, expressionNames)
 	if err != nil {
 		log.Printf("❌ Error updating interaction status: %v", err)

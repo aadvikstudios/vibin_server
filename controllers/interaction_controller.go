@@ -91,6 +91,77 @@ func (c *InteractionController) HandlePingUser(w http.ResponseWriter, r *http.Re
 	json.NewEncoder(w).Encode(map[string]string{"status": "success", "message": "Ping sent successfully"})
 }
 
+// HandleApprovePing - User approves a ping request
+func (c *InteractionController) HandleApprovePing(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		SenderHandle   string `json:"senderHandle"`
+		ReceiverHandle string `json:"receiverHandle"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		http.Error(w, `{"error": "Invalid request body"}`, http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("✅ %s approved ping from %s", request.ReceiverHandle, request.SenderHandle)
+
+	ctx := context.TODO()
+
+	// ✅ Step 1: Update interaction status to "approved"
+	if err := c.InteractionService.UpdateInteractionStatus(ctx, request.SenderHandle, request.ReceiverHandle, "approved"); err != nil {
+		log.Printf("❌ Failed to update interaction status: %v", err)
+		http.Error(w, `{"error": "Failed to approve ping"}`, http.StatusInternalServerError)
+		return
+	}
+
+	// ✅ Step 2: Create a match entry
+	matchID, err := c.InteractionService.CreateMatch(ctx, request.SenderHandle, request.ReceiverHandle)
+	if err != nil {
+		log.Printf("❌ Failed to create match: %v", err)
+		http.Error(w, `{"error": "Failed to create match"}`, http.StatusInternalServerError)
+		return
+	}
+
+	// ✅ Step 3: Send an initial welcome message in Messages table
+	if err := c.InteractionService.SendInitialMessage(ctx, matchID, request.SenderHandle, request.ReceiverHandle); err != nil {
+		log.Printf("❌ Failed to send initial message: %v", err)
+		http.Error(w, `{"error": "Failed to send initial message"}`, http.StatusInternalServerError)
+		return
+	}
+
+	// ✅ Step 4: Success Response
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"status":  "success",
+		"message": "Ping approved, match created, and initial message sent",
+	})
+}
+
+// HandleDeclinePing - User declines a ping request
+func (c *InteractionController) HandleDeclinePing(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		SenderHandle   string `json:"senderHandle"`
+		ReceiverHandle string `json:"receiverHandle"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		http.Error(w, `{"error": "Invalid request body"}`, http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("❌ %s declined ping from %s", request.ReceiverHandle, request.SenderHandle)
+
+	// ✅ Update interaction status from "pending" to "declined"
+	err := c.InteractionService.UpdateInteractionStatus(context.TODO(), request.SenderHandle, request.ReceiverHandle, "declined")
+	if err != nil {
+		http.Error(w, `{"error": "Failed to decline ping"}`, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "success", "message": "Ping declined"})
+}
+
 // HandleGetInteractions - Fetch all interactions for a user
 func (c *InteractionController) HandleGetInteractions(w http.ResponseWriter, r *http.Request) {
 	var request struct {

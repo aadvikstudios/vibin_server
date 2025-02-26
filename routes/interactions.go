@@ -14,5 +14,7 @@ func RegisterInteractionRoutes(r *mux.Router, interactionService *services.Inter
 	interactionRouter.HandleFunc("/like", controller.HandleLikeUser).Methods("POST")
 	interactionRouter.HandleFunc("/dislike", controller.HandleDislikeUser).Methods("POST")
 	interactionRouter.HandleFunc("/ping", controller.HandlePingUser).Methods("POST")
+	interactionRouter.HandleFunc("/ping/approve", controller.HandleApprovePing).Methods("POST") // ✅ Approve Ping
+	interactionRouter.HandleFunc("/ping/decline", controller.HandleDeclinePing).Methods("POST") // ✅ Decline Ping
 	interactionRouter.HandleFunc("/get", controller.HandleGetInteractions).Methods("POST")
 }
