@@ -19,28 +19,27 @@ func NewChatController(service *services.ChatService) *ChatController {
 	return &ChatController{ChatService: service}
 }
 
-// HandleGetMessages - Fetch messages by matchId
+// HandleGetMessages - Fetch messages based on matchId
 func (c *ChatController) HandleGetMessages(w http.ResponseWriter, r *http.Request) {
 	// ✅ Parse query parameters
 	matchID := r.URL.Query().Get("matchId")
 	limitStr := r.URL.Query().Get("limit")
 
+	// ✅ Validate matchId
 	if matchID == "" {
 		http.Error(w, `{"error": "matchId is required"}`, http.StatusBadRequest)
 		return
 	}
 
-	// ✅ Convert limit to integer (default to 50 if not provided)
-	limit := 50
-	if limitStr != "" {
-		if parsedLimit, err := strconv.Atoi(limitStr); err == nil {
-			limit = parsedLimit
-		}
+	// ✅ Convert limit from string to int (default: 50)
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 {
+		limit = 50 // Default to 50 messages
 	}
 
 	log.Printf("🔍 Fetching messages for matchId: %s, Limit: %d", matchID, limit)
 
-	// ✅ Fetch messages from DynamoDB
+	// ✅ Fetch messages
 	messages, err := c.ChatService.GetMessagesByMatchID(context.TODO(), matchID, limit)
 	if err != nil {
 		log.Printf("❌ Error fetching messages: %v", err)

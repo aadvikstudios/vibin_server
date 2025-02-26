@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sort"
 	"strings"
 	"vibin_server/models"
 
@@ -18,18 +19,23 @@ type ChatService struct {
 
 // GetMessagesByMatchID fetches messages for a given matchId sorted by createdAt
 func (s *ChatService) GetMessagesByMatchID(ctx context.Context, matchID string, limit int) ([]models.Message, error) {
-	log.Printf("🔍 Querying messages for matchId: %s (Limit: %d)", matchID, limit)
+	log.Printf("🔍 Fetching messages for matchId: %s, Limit: %d", matchID, limit)
 
-	keyCondition := "matchId = :matchId"
+	// ✅ Use ExpressionAttributeNames to avoid conflicts
+	keyCondition := "#matchId = :matchId"
 	expressionValues := map[string]types.AttributeValue{
 		":matchId": &types.AttributeValueMemberS{Value: matchID},
+	}
+	expressionNames := map[string]string{
+		"#matchId":   "matchId",   // ✅ Prevents DynamoDB reserved word conflicts
+		"#createdAt": "createdAt", // ✅ Ensures sorting works
 	}
 
 	// ✅ Convert `limit` from `int` to `int32`
 	limitInt32 := int32(limit)
 
-	// ✅ Query DynamoDB
-	items, err := s.Dynamo.QueryItems(ctx, models.MessagesTable, keyCondition, expressionValues, map[string]string{"createdAt": "DESC"}, limitInt32)
+	// ✅ Query DynamoDB (Fixed argument count)
+	items, err := s.Dynamo.QueryItems(ctx, models.MessagesTable, keyCondition, expressionValues, expressionNames, limitInt32)
 	if err != nil {
 		log.Printf("❌ Error querying messages: %v", err)
 		return nil, fmt.Errorf("failed to fetch messages: %w", err)
@@ -43,7 +49,13 @@ func (s *ChatService) GetMessagesByMatchID(ctx context.Context, matchID string, 
 		return nil, fmt.Errorf("failed to parse messages: %w", err)
 	}
 
-	// ✅ Convert `isUnread` from string to lowercase for consistency
+	// ✅ Sort results manually (since DynamoDB doesn't provide order directly)
+	// Sorting in descending order (newest first)
+	sort.SliceStable(messages, func(i, j int) bool {
+		return messages[i].CreatedAt > messages[j].CreatedAt
+	})
+
+	// ✅ Convert `isUnread` to lowercase for consistency
 	for i, msg := range messages {
 		messages[i].IsUnread = strings.ToLower(msg.IsUnread) // Ensure "True" -> "true"
 	}
