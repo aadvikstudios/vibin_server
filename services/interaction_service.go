@@ -164,31 +164,91 @@ func (s *InteractionService) GetLikedOrDislikedUsers(ctx context.Context, sender
 	return likedDislikedUsers, nil
 }
 
-// GetInteractionsByReceiverHandle - Fetch all interactions for a user
-func (s *InteractionService) GetInteractionsByReceiverHandle(ctx context.Context, receiverHandle string) ([]models.Interaction, error) {
+func (s *InteractionService) GetInteractionsByReceiverHandle(ctx context.Context, receiverHandle string) ([]models.InteractionWithProfile, error) {
 	log.Printf("🔍 Querying interactions where receiverHandle = %s", receiverHandle)
 
-	// Set Key Condition for Query
-	keyCondition := "receiverHandle = :receiver"
-	expressionValues := map[string]types.AttributeValue{
-		":receiver": &types.AttributeValueMemberS{Value: receiverHandle},
-	}
-
-	// Perform Query on DynamoDB
-	items, err := s.Dynamo.QueryItems(ctx, models.InteractionsTable, keyCondition, expressionValues, nil, 100)
+	// ✅ Fetch interactions for the given receiverHandle
+	interactions, err := s.GetInteractionsForReceiver(ctx, receiverHandle)
 	if err != nil {
 		log.Printf("❌ Error fetching interactions: %v", err)
 		return nil, err
 	}
 
-	// ✅ Unmarshal DynamoDB items into Go struct
-	var interactions []models.Interaction
-	err = attributevalue.UnmarshalListOfMaps(items, &interactions)
+	log.Printf("✅ Found %d interactions for receiverHandle: %s", len(interactions), receiverHandle)
+
+	// ✅ Enrich interactions with user profile data
+	return s.EnrichInteractionsWithProfiles(ctx, interactions)
+}
+
+// ✅ Fetch interactions from DynamoDB
+func (s *InteractionService) GetInteractionsForReceiver(ctx context.Context, receiverHandle string) ([]models.Interaction, error) {
+	keyCondition := "receiverHandle = :receiver"
+	expressionValues := map[string]types.AttributeValue{
+		":receiver": &types.AttributeValueMemberS{Value: receiverHandle},
+	}
+
+	items, err := s.Dynamo.QueryItems(ctx, models.InteractionsTable, keyCondition, expressionValues, nil, 100)
 	if err != nil {
-		log.Printf("❌ Error unmarshalling interactions: %v", err)
 		return nil, err
 	}
 
-	log.Printf("✅ Found %d interactions for receiverHandle: %s", len(interactions), receiverHandle)
+	var interactions []models.Interaction
+	err = attributevalue.UnmarshalListOfMaps(items, &interactions)
+	if err != nil {
+		return nil, err
+	}
+
 	return interactions, nil
+}
+
+// ✅ Fetch user profiles for interactions and merge them
+func (s *InteractionService) EnrichInteractionsWithProfiles(ctx context.Context, interactions []models.Interaction) ([]models.InteractionWithProfile, error) {
+	var enrichedInteractions []models.InteractionWithProfile
+
+	for _, interaction := range interactions {
+		// Fetch sender's profile from UserProfiles table
+		userProfileKey := map[string]types.AttributeValue{
+			"userhandle": &types.AttributeValueMemberS{Value: interaction.SenderHandle},
+		}
+
+		userProfileItem, err := s.Dynamo.GetItem(ctx, models.UserProfilesTable, userProfileKey)
+		if err != nil {
+			log.Printf("⚠️ Warning: Failed to fetch profile for %s: %v", interaction.SenderHandle, err)
+			userProfileItem = map[string]types.AttributeValue{} // Empty profile
+		}
+
+		// Convert profile data from DynamoDB to struct
+		var userProfileData models.UserProfile
+		err = attributevalue.UnmarshalMap(userProfileItem, &userProfileData)
+		if err != nil {
+			log.Printf("⚠️ Warning: Failed to parse profile data for %s: %v", interaction.SenderHandle, err)
+			continue
+		}
+
+		// Merge interaction and profile data
+		combinedData := models.InteractionWithProfile{
+			ReceiverHandle: interaction.ReceiverHandle,
+			SenderHandle:   interaction.SenderHandle,
+			Type:           interaction.Type,
+			Message:        interaction.Message,
+			Status:         interaction.Status,
+			CreatedAt:      interaction.CreatedAt,
+
+			// Profile Fields
+			Name:          userProfileData.Name,
+			UserName:      userProfileData.UserName,
+			Age:           userProfileData.Age,
+			Gender:        userProfileData.Gender,
+			Orientation:   userProfileData.Orientation,
+			LookingFor:    userProfileData.LookingFor,
+			Photos:        userProfileData.Photos,
+			Bio:           userProfileData.Bio,
+			Interests:     userProfileData.Interests,
+			Questionnaire: userProfileData.Questionnaire,
+		}
+
+		enrichedInteractions = append(enrichedInteractions, combinedData)
+	}
+
+	return enrichedInteractions, nil
 }

@@ -102,6 +102,7 @@ func (c *InteractionController) HandleGetInteractions(w http.ResponseWriter, r *
 		return
 	}
 
+	// Fetch enriched interactions
 	interactions, err := c.InteractionService.GetInteractionsByReceiverHandle(context.TODO(), request.ReceiverHandle)
 	if err != nil {
 		http.Error(w, `{"error": "Failed to fetch interactions"}`, http.StatusInternalServerError)
