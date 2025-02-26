@@ -243,9 +243,6 @@ func (s *InteractionService) SendInitialMessage(ctx context.Context, matchID, se
 	createdAt := time.Now().Format(time.RFC3339)
 
 	// If no message was provided (mutual like case), use a default message
-	if message == "" {
-		message = "Hey! You both matched! 🎉 Start a conversation now!"
-	}
 
 	newMessage := models.Message{
 		MatchID:   matchID,
