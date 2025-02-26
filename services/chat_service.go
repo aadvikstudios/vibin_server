@@ -21,14 +21,13 @@ type ChatService struct {
 func (s *ChatService) GetMessagesByMatchID(ctx context.Context, matchID string, limit int) ([]models.Message, error) {
 	log.Printf("🔍 Fetching messages for matchId: %s, Limit: %d", matchID, limit)
 
-	// ✅ Use ExpressionAttributeNames to avoid conflicts
+	// ✅ Define the key condition expression
 	keyCondition := "#matchId = :matchId"
 	expressionValues := map[string]types.AttributeValue{
 		":matchId": &types.AttributeValueMemberS{Value: matchID},
 	}
 	expressionNames := map[string]string{
-		"#matchId":   "matchId",   // ✅ Prevents DynamoDB reserved word conflicts
-		"#createdAt": "createdAt", // ✅ Ensures sorting works
+		"#matchId": "matchId", // ✅ Prevents DynamoDB reserved word conflicts
 	}
 
 	// ✅ Convert `limit` from `int` to `int32`
