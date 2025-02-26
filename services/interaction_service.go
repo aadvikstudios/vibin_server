@@ -17,7 +17,7 @@ type InteractionService struct {
 	Dynamo *DynamoService
 }
 
-// ✅ Updated SaveInteraction to accept a message parameter
+// SaveInteraction - Store like, dislike, or ping interaction
 func (s *InteractionService) SaveInteraction(ctx context.Context, senderHandle, receiverHandle, interactionType, message string) error {
 	createdAt := time.Now().Format(time.RFC3339)
 
@@ -29,19 +29,17 @@ func (s *InteractionService) SaveInteraction(ctx context.Context, senderHandle, 
 		CreatedAt:      createdAt,
 	}
 
-	// ✅ Only add message if it's a "ping"
 	if interactionType == "ping" && message != "" {
-		interaction.Message = message
+		interaction.Message = &message
 	}
 
-	// ✅ Save the interaction in DynamoDB
 	err := s.Dynamo.PutItem(ctx, models.InteractionsTable, interaction)
 	if err != nil {
 		log.Printf("❌ Failed to save interaction: %v", err)
-		return fmt.Errorf("failed to save interaction: %w", err)
+		return err
 	}
 
-	log.Printf("✅ Interaction recorded: %s -> %s (%s)", senderHandle, receiverHandle, interactionType)
+	log.Printf("✅ Interaction saved: %s -> %s (%s)", senderHandle, receiverHandle, interactionType)
 	return nil
 }
 
@@ -158,74 +156,31 @@ func (s *InteractionService) GetLikedOrDislikedUsers(ctx context.Context, sender
 	return likedDislikedUsers, nil
 }
 
-func (s *InteractionService) GetInteractionsByReceiverHandle(ctx context.Context, receiverHandle string) ([]models.InteractionWithProfile, error) {
+// GetInteractionsByReceiverHandle - Fetch all interactions for a user
+func (s *InteractionService) GetInteractionsByReceiverHandle(ctx context.Context, receiverHandle string) ([]models.Interaction, error) {
 	log.Printf("🔍 Querying interactions where receiverHandle = %s", receiverHandle)
 
+	// Set Key Condition for Query
 	keyCondition := "receiverHandle = :receiver"
 	expressionValues := map[string]types.AttributeValue{
 		":receiver": &types.AttributeValueMemberS{Value: receiverHandle},
 	}
 
+	// Perform Query on DynamoDB
 	items, err := s.Dynamo.QueryItems(ctx, models.InteractionsTable, keyCondition, expressionValues, nil, 100)
 	if err != nil {
-		log.Printf("❌ Error querying interactions: %v", err)
-		return nil, fmt.Errorf("failed to fetch interactions: %w", err)
+		log.Printf("❌ Error fetching interactions: %v", err)
+		return nil, err
 	}
 
-	var enrichedInteractions []models.InteractionWithProfile
-
-	for _, item := range items {
-		var interaction models.Interaction
-		err := attributevalue.UnmarshalMap(item, &interaction)
-		if err != nil {
-			log.Printf("❌ Error unmarshalling interaction: %v", err)
-			continue
-		}
-
-		// ✅ Corrected: Use a map for key
-		userProfileKey := map[string]types.AttributeValue{
-			"userhandle": &types.AttributeValueMemberS{Value: interaction.SenderHandle},
-		}
-
-		// ✅ Fetch user profile using the corrected function call
-		userProfile, err := s.Dynamo.GetItem(ctx, models.UserProfilesTable, userProfileKey)
-		if err != nil {
-			log.Printf("⚠️ Warning: Failed to fetch user profile for %s: %v", interaction.SenderHandle, err)
-			userProfile = map[string]types.AttributeValue{} // Empty profile
-		}
-
-		// ✅ Convert profile data from DynamoDB to struct
-		var userProfileData models.UserProfile
-		err = attributevalue.UnmarshalMap(userProfile, &userProfileData)
-		if err != nil {
-			log.Printf("⚠️ Warning: Failed to parse user profile data: %v", err)
-			continue
-		}
-
-		// ✅ Merge into `InteractionWithProfile` struct
-		combinedData := models.InteractionWithProfile{
-			ReceiverHandle: interaction.ReceiverHandle,
-			SenderHandle:   interaction.SenderHandle,
-			Type:           interaction.Type,
-			Message:        interaction.Message,
-			Status:         interaction.Status,
-			CreatedAt:      interaction.CreatedAt,
-
-			// Profile fields
-			Name:          userProfileData.Name,
-			UserName:      userProfileData.UserName,
-			Age:           userProfileData.Age,
-			Gender:        userProfileData.Gender,
-			Orientation:   userProfileData.Orientation,
-			LookingFor:    userProfileData.LookingFor,
-			Photos:        userProfileData.Photos,
-			Bio:           userProfileData.Bio,
-			Interests:     userProfileData.Interests,
-			Questionnaire: userProfileData.Questionnaire,
-		}
-
-		enrichedInteractions = append(enrichedInteractions, combinedData)
+	// ✅ Unmarshal DynamoDB items into Go struct
+	var interactions []models.Interaction
+	err = attributevalue.UnmarshalListOfMaps(items, &interactions)
+	if err != nil {
+		log.Printf("❌ Error unmarshalling interactions: %v", err)
+		return nil, err
 	}
 
-	return enrichedInteractions, nil
+	log.Printf("✅ Found %d interactions for receiverHandle: %s", len(interactions), receiverHandle)
+	return interactions, nil
 }
