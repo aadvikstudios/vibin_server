@@ -14,4 +14,6 @@ func RegisterInteractionRoutes(r *mux.Router, interactionService *services.Inter
 	interactionRouter := r.PathPrefix("/api/interactions").Subrouter()
 	interactionRouter.HandleFunc("/like", controller.HandleLikeUser).Methods("POST")
 	interactionRouter.HandleFunc("/dislike", controller.HandleDislikeUser).Methods("POST")
+	interactionRouter.HandleFunc("/get", controller.HandleGetInteractions).Methods("POST") // ✅ Add this new route
+
 }

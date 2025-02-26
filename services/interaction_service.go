@@ -152,3 +152,36 @@ func (s *InteractionService) GetLikedOrDislikedUsers(ctx context.Context, sender
 	log.Printf("✅ Found %d interactions for %s", len(likedDislikedUsers), senderHandle)
 	return likedDislikedUsers, nil
 }
+
+// GetInteractionsByReceiverHandle fetches interactions where the given receiverHandle is the target
+func (s *InteractionService) GetInteractionsByReceiverHandle(ctx context.Context, receiverHandle string) ([]models.Interaction, error) {
+	log.Printf("🔍 Querying interactions where receiverHandle = %s", receiverHandle)
+
+	// Define query conditions
+	keyCondition := "receiverHandle = :receiver"
+	expressionValues := map[string]types.AttributeValue{
+		":receiver": &types.AttributeValueMemberS{Value: receiverHandle},
+	}
+
+	// Query DynamoDB
+	items, err := s.Dynamo.QueryItems(ctx, models.InteractionsTable, keyCondition, expressionValues, nil, 100)
+	if err != nil {
+		log.Printf("❌ Error querying interactions for receiverHandle %s: %v", receiverHandle, err)
+		return nil, fmt.Errorf("failed to fetch interactions: %w", err)
+	}
+
+	// Parse and return interactions
+	var interactions []models.Interaction
+	for _, item := range items {
+		var interaction models.Interaction
+		err := attributevalue.UnmarshalMap(item, &interaction)
+		if err != nil {
+			log.Printf("❌ Error unmarshalling interaction: %v", err)
+			continue
+		}
+		interactions = append(interactions, interaction)
+	}
+
+	log.Printf("✅ Found %d interactions for receiverHandle %s", len(interactions), receiverHandle)
+	return interactions, nil
+}

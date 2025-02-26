@@ -87,3 +87,30 @@ func (c *InteractionController) HandleDislikeUser(w http.ResponseWriter, r *http
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "success", "message": "User disliked"})
 }
+
+// HandleGetInteractions fetches all interactions for a given receiverHandle
+func (c *InteractionController) HandleGetInteractions(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		ReceiverHandle string `json:"receiverHandle"`
+	}
+
+	// Decode request body
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		http.Error(w, `{"error": "Invalid request body"}`, http.StatusBadRequest)
+		return
+	}
+
+	// Log request
+	log.Printf("🔍 Fetching interactions for receiverHandle: %s", request.ReceiverHandle)
+
+	// Fetch interactions
+	interactions, err := c.InteractionService.GetInteractionsByReceiverHandle(context.TODO(), request.ReceiverHandle)
+	if err != nil {
+		http.Error(w, `{"error": "Failed to fetch interactions"}`, http.StatusInternalServerError)
+		return
+	}
+
+	// Send JSON response
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(interactions)
+}
