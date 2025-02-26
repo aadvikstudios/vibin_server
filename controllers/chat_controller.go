@@ -51,3 +51,28 @@ func (c *ChatController) HandleGetMessages(w http.ResponseWriter, r *http.Reques
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(messages)
 }
+
+// ✅ HandleMarkMessagesAsRead - Mark messages received by user as read
+func (c *ChatController) HandleMarkMessagesAsRead(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		MatchID    string `json:"matchId"`
+		UserHandle string `json:"userHandle"` // ✅ Who is marking messages as read
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		http.Error(w, `{"error": "Invalid request body"}`, http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("🔄 Marking messages as read for matchId: %s, User: %s", request.MatchID, request.UserHandle)
+
+	// ✅ Call service function to update messages
+	err := c.ChatService.MarkMessagesAsRead(context.TODO(), request.MatchID, request.UserHandle)
+	if err != nil {
+		http.Error(w, `{"error": "Failed to mark messages as read"}`, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "success", "message": "Messages received by user marked as read"})
+}

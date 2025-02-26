@@ -80,3 +80,53 @@ func (s *ChatService) SendMessage(ctx context.Context, message models.Message) e
 	log.Printf("✅ Message stored successfully")
 	return nil
 }
+
+// ✅ MarkMessagesAsRead - Marks only the messages received by user as read
+func (s *ChatService) MarkMessagesAsRead(ctx context.Context, matchID string, userHandle string) error {
+	log.Printf("🔄 Marking messages as read for matchId: %s where receiver is %s", matchID, userHandle)
+
+	// ✅ Query messages where matchId matches AND sender is NOT the userHandle
+	keyCondition := "matchId = :matchId AND senderId <> :userHandle"
+	expressionValues := map[string]types.AttributeValue{
+		":matchId":    &types.AttributeValueMemberS{Value: matchID},
+		":userHandle": &types.AttributeValueMemberS{Value: userHandle}, // ✅ Ensure we filter messages NOT sent by user
+	}
+
+	// ✅ Fetch messages that need to be updated
+	items, err := s.Dynamo.QueryItems(ctx, models.MessagesTable, keyCondition, expressionValues, nil, 100)
+	if err != nil {
+		log.Printf("❌ Error fetching messages: %v", err)
+		return fmt.Errorf("failed to fetch messages: %w", err)
+	}
+
+	// ✅ Batch update each message to set `isUnread` as "false"
+	for _, item := range items {
+		// Extract Message ID
+		messageIDAttr, exists := item["messageId"]
+		if !exists {
+			continue
+		}
+		messageID := messageIDAttr.(*types.AttributeValueMemberS).Value
+
+		// ✅ Define update key
+		key := map[string]types.AttributeValue{
+			"matchId":   &types.AttributeValueMemberS{Value: matchID},
+			"messageId": &types.AttributeValueMemberS{Value: messageID},
+		}
+
+		// ✅ Update Expression
+		updateExpression := "SET isUnread = :false"
+		expressionValues := map[string]types.AttributeValue{
+			":false": &types.AttributeValueMemberS{Value: "false"}, // Ensure it's stored as string
+		}
+
+		// ✅ Perform update
+		_, err := s.Dynamo.UpdateItem(ctx, models.MessagesTable, updateExpression, key, expressionValues, nil)
+		if err != nil {
+			log.Printf("❌ Failed to update message %s: %v", messageID, err)
+		}
+	}
+
+	log.Printf("✅ Successfully marked messages as read for matchId: %s where receiver is %s", matchID, userHandle)
+	return nil
+}
