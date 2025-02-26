@@ -15,23 +15,6 @@ type MatchService struct {
 	Dynamo *DynamoService
 }
 
-// GetMatchesByUserHandle fetches matches and enriches them with the matched user's profile
-func (s *MatchService) GetMatchesByUserHandle(ctx context.Context, userHandle string) ([]models.MatchWithProfile, error) {
-	// ✅ Fetch matches as []models.Match
-	matches, err := s.FetchMatches(ctx, userHandle)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch matches: %w", err)
-	}
-
-	// ✅ Enrich matches with the matched user's profile
-	enrichedMatches, err := s.EnrichMatchesWithProfiles(ctx, userHandle, matches)
-	if err != nil {
-		return nil, fmt.Errorf("failed to enrich matches with profiles: %w", err)
-	}
-
-	return enrichedMatches, nil
-}
-
 // FetchMatches queries the Matches table using both indexes
 func (s *MatchService) FetchMatches(ctx context.Context, userHandle string) ([]models.Match, error) {
 	var matches []models.Match
@@ -83,8 +66,8 @@ func (s *MatchService) FetchMatches(ctx context.Context, userHandle string) ([]m
 	return matches, nil
 }
 
-// EnrichMatchesWithProfiles fetches user profiles and merges them with match data
-func (s *MatchService) EnrichMatchesWithProfiles(ctx context.Context, userHandle string, matches []models.Match) ([]models.MatchWithProfile, error) {
+// ✅ Enrich Matches with User Profiles
+func (s *MatchService) EnrichMatchesWithProfiles(ctx context.Context, userHandle string, matches []models.MatchWithProfile) ([]models.MatchWithProfile, error) {
 	var enrichedMatches []models.MatchWithProfile
 
 	for _, match := range matches {
@@ -113,29 +96,112 @@ func (s *MatchService) EnrichMatchesWithProfiles(ctx context.Context, userHandle
 			continue
 		}
 
-		// ✅ Merge match and profile data
-		combinedData := models.MatchWithProfile{
+		// ✅ Update the existing match object with profile data
+		match.Name = userProfileData.Name
+		match.UserName = userProfileData.UserName
+		match.Age = userProfileData.Age
+		match.Gender = userProfileData.Gender
+		match.Orientation = userProfileData.Orientation
+		match.LookingFor = userProfileData.LookingFor
+		match.Photos = userProfileData.Photos
+		match.Bio = userProfileData.Bio
+		match.Interests = userProfileData.Interests
+		match.Questionnaire = userProfileData.Questionnaire
+
+		enrichedMatches = append(enrichedMatches, match)
+	}
+
+	return enrichedMatches, nil
+}
+
+// ✅ Fetch Matches & Enrich with Profile, Last Message & Unread Status
+// ✅ Fetch Matches & Enrich with Profile, Last Message & Unread Status
+func (s *MatchService) GetMatchesByUserHandle(ctx context.Context, userHandle string) ([]models.MatchWithProfile, error) {
+	// ✅ Step 1: Fetch Matches
+	matches, err := s.FetchMatches(ctx, userHandle)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch matches: %w", err)
+	}
+
+	// ✅ Step 2: Fetch Last Message & Unread Status for Each Match
+	matchesWithMessages, err := s.AttachLastMessageAndUnreadStatus(ctx, userHandle, matches)
+	if err != nil {
+		return nil, fmt.Errorf("failed to attach last message: %w", err)
+	}
+
+	// ✅ Step 3: Fetch User Profiles (Pass matchesWithMessages instead of matches)
+	enrichedMatches, err := s.EnrichMatchesWithProfiles(ctx, userHandle, matchesWithMessages)
+	if err != nil {
+		return nil, fmt.Errorf("failed to enrich matches with profiles: %w", err)
+	}
+
+	return enrichedMatches, nil
+}
+
+// ✅ Fetch the Last Message & Unread Status for Each Match
+func (s *MatchService) AttachLastMessageAndUnreadStatus(ctx context.Context, userHandle string, matches []models.Match) ([]models.MatchWithProfile, error) {
+	var enrichedMatches []models.MatchWithProfile
+
+	for _, match := range matches {
+		// ✅ Query latest message for the match
+		lastMessage, isUnread, err := s.FetchLastMessageAndUnread(ctx, match.MatchID, userHandle)
+		if err != nil {
+			log.Printf("⚠️ Warning: Failed to fetch last message for MatchID %s: %v", match.MatchID, err)
+			lastMessage = ""
+			isUnread = false
+		}
+
+		// ✅ Convert match to MatchWithProfile
+		enrichedMatch := models.MatchWithProfile{
 			MatchID:     match.MatchID,
 			User1Handle: match.User1Handle,
 			User2Handle: match.User2Handle,
 			Status:      match.Status,
 			CreatedAt:   match.CreatedAt,
-
-			// Profile Fields of the Other User
-			Name:          userProfileData.Name,
-			UserName:      userProfileData.UserName,
-			Age:           userProfileData.Age,
-			Gender:        userProfileData.Gender,
-			Orientation:   userProfileData.Orientation,
-			LookingFor:    userProfileData.LookingFor,
-			Photos:        userProfileData.Photos,
-			Bio:           userProfileData.Bio,
-			Interests:     userProfileData.Interests,
-			Questionnaire: userProfileData.Questionnaire,
+			LastMessage: lastMessage,
+			IsUnread:    isUnread,
 		}
 
-		enrichedMatches = append(enrichedMatches, combinedData)
+		enrichedMatches = append(enrichedMatches, enrichedMatch)
 	}
 
 	return enrichedMatches, nil
+}
+
+// ✅ Fetch Last Message & Unread Status for a Match
+func (s *MatchService) FetchLastMessageAndUnread(ctx context.Context, matchID string, userHandle string) (string, bool, error) {
+	log.Printf("🔍 Fetching last message & unread status for MatchID: %s", matchID)
+
+	// ✅ Query Latest Message from DynamoDB
+	keyCondition := "#matchId = :matchId"
+	expressionValues := map[string]types.AttributeValue{
+		":matchId": &types.AttributeValueMemberS{Value: matchID},
+	}
+	expressionNames := map[string]string{
+		"#matchId": "matchId",
+	}
+
+	messages, err := s.Dynamo.QueryItemsWithOptions(ctx, models.MessagesTable, keyCondition, expressionValues, expressionNames, 1, true)
+	if err != nil {
+		log.Printf("❌ Error fetching last message for MatchID %s: %v", matchID, err)
+		return "", false, err
+	}
+
+	if len(messages) == 0 {
+		return "", false, nil // No messages found
+	}
+
+	// ✅ Unmarshal Last Message
+	var lastMessage models.Message
+	err = attributevalue.UnmarshalMap(messages[0], &lastMessage)
+	if err != nil {
+		log.Printf("❌ Error unmarshalling last message: %v", err)
+		return "", false, err
+	}
+
+	// ✅ Check Unread Status (if sender is NOT the current user)
+	isUnread := lastMessage.IsUnread == "true" && lastMessage.SenderID != userHandle
+
+	log.Printf("✅ Last message: %s, IsUnread: %v", lastMessage.Content, isUnread)
+	return lastMessage.Content, isUnread, nil
 }

@@ -21,4 +21,8 @@ type MatchWithProfile struct {
 	Interests       []string          `json:"interests,omitempty"`
 	DistanceBetween float64           `json:"distanceBetween,omitempty"`
 	Questionnaire   map[string]string `json:"questionnaire,omitempty"`
+	// New Fields
+	LastMessage string `json:"lastMessage,omitempty"` // ✅ Last message content
+	IsUnread    bool   `json:"isUnread,omitempty"`    // ✅ If user has unread messages
+
 }
