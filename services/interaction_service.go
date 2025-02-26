@@ -225,14 +225,19 @@ func (s *InteractionService) EnrichInteractionsWithProfiles(ctx context.Context,
 			continue
 		}
 
-		// Merge interaction and profile data
+		// ✅ Merge interaction and profile data
 		combinedData := models.InteractionWithProfile{
 			ReceiverHandle: interaction.ReceiverHandle,
 			SenderHandle:   interaction.SenderHandle,
 			Type:           interaction.Type,
-			Message:        interaction.Message,
-			Status:         interaction.Status,
-			CreatedAt:      interaction.CreatedAt,
+			Message: func() string { // ✅ Safely handle *string
+				if interaction.Message != nil {
+					return *interaction.Message
+				}
+				return ""
+			}(),
+			Status:    interaction.Status,
+			CreatedAt: interaction.CreatedAt,
 
 			// Profile Fields
 			Name:          userProfileData.Name,
