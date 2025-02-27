@@ -85,7 +85,6 @@ func (s *InteractionService) CreateOrUpdateInteraction(ctx context.Context, send
 		return err
 	}
 
-	// Determine status updates based on action
 	var newStatus string
 	var matchID *string
 
@@ -114,12 +113,13 @@ func (s *InteractionService) CreateOrUpdateInteraction(ctx context.Context, send
 		return fmt.Errorf("❌ Unsupported interaction type: %s", interactionType)
 	}
 
-	// If it's a new interaction, insert it
+	// 🔥 If the interaction does not exist, create it
 	if existingInteraction == nil {
+		log.Printf("🆕 Interaction does not exist. Creating new interaction...")
 		return s.CreateInteraction(ctx, sender, receiver, interactionType, newStatus, matchID, message)
 	}
 
-	// Otherwise, update existing interaction
+	// 🔥 Otherwise, update existing interaction
 	return s.UpdateInteractionStatus(ctx, sender, receiver, newStatus, matchID, message)
 }
 
@@ -140,7 +140,13 @@ func (s *InteractionService) CreateInteraction(ctx context.Context, sender, rece
 	}
 
 	log.Printf("📥 Saving new interaction: %+v", interaction)
-	return s.Dynamo.PutItem(ctx, models.InteractionsTable, interaction)
+	err := s.Dynamo.PutItem(ctx, models.InteractionsTable, interaction)
+	if err != nil {
+		log.Printf("❌ Error inserting interaction: %v", err)
+		return fmt.Errorf("failed to create interaction: %w", err)
+	}
+	log.Println("✅ Interaction successfully created.")
+	return nil
 }
 
 // UpdateInteractionStatus updates the status of an existing interaction
