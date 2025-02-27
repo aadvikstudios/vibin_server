@@ -19,7 +19,7 @@ type InteractionService struct {
 }
 
 // CreateOrUpdateInteraction handles likes, dislikes, pings, and approvals
-func (s *InteractionService) CreateOrUpdateInteraction(ctx context.Context, sender, receiver, interactionType, action string) error {
+func (s *InteractionService) CreateOrUpdateInteraction(ctx context.Context, sender, receiver, interactionType, action string, message *string) error {
 	log.Printf("🔄 Processing %s from %s -> %s", interactionType, sender, receiver)
 
 	// Check if an existing interaction exists
@@ -58,15 +58,15 @@ func (s *InteractionService) CreateOrUpdateInteraction(ctx context.Context, send
 
 	// If it's a new interaction, insert it
 	if existingInteraction == nil {
-		return s.CreateInteraction(ctx, sender, receiver, interactionType, newStatus, matchID)
+		return s.CreateInteraction(ctx, sender, receiver, interactionType, newStatus, matchID, message)
 	}
 
 	// Otherwise, update existing interaction
-	return s.UpdateInteractionStatus(ctx, existingInteraction.InteractionID, newStatus, matchID)
+	return s.UpdateInteractionStatus(ctx, existingInteraction.InteractionID, newStatus, matchID, message)
 }
 
 // CreateInteraction inserts a new interaction into DynamoDB
-func (s *InteractionService) CreateInteraction(ctx context.Context, sender, receiver, interactionType, status string, matchID *string) error {
+func (s *InteractionService) CreateInteraction(ctx context.Context, sender, receiver, interactionType, status string, matchID *string, message *string) error {
 	interactionID := uuid.New().String()
 	now := time.Now().Format(time.RFC3339)
 	interaction := models.Interaction{
@@ -75,9 +75,10 @@ func (s *InteractionService) CreateInteraction(ctx context.Context, sender, rece
 		UserLookup:      sender, // Used for querying
 		SenderHandle:    sender,
 		InteractionType: interactionType,
-		ChatType:        models.ChatTypePrivate,
+		ChatType:        "private",
 		Status:          status,
 		MatchID:         matchID,
+		Message:         message, // ✅ Store message if provided
 		CreatedAt:       now,
 		LastUpdated:     now,
 	}
@@ -87,7 +88,7 @@ func (s *InteractionService) CreateInteraction(ctx context.Context, sender, rece
 }
 
 // UpdateInteractionStatus updates the status of an existing interaction
-func (s *InteractionService) UpdateInteractionStatus(ctx context.Context, interactionID, newStatus string, matchID *string) error {
+func (s *InteractionService) UpdateInteractionStatus(ctx context.Context, interactionID, newStatus string, matchID *string, message *string) error {
 	log.Printf("🔄 Updating interaction %s to status: %s", interactionID, newStatus)
 
 	updateExpression := "SET #status = :status, #lastUpdated = :lastUpdated"
@@ -105,6 +106,13 @@ func (s *InteractionService) UpdateInteractionStatus(ctx context.Context, intera
 		updateExpression += ", #matchId = :matchId"
 		expressionValues[":matchId"] = &types.AttributeValueMemberS{Value: *matchID}
 		expressionNames["#matchId"] = "matchId"
+	}
+
+	// Add message if provided (only for pings)
+	if message != nil {
+		updateExpression += ", #message = :message"
+		expressionValues[":message"] = &types.AttributeValueMemberS{Value: *message}
+		expressionNames["#message"] = "message"
 	}
 
 	// Define key for update

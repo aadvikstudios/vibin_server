@@ -13,13 +13,14 @@ type InteractionController struct {
 	InteractionService *services.InteractionService
 }
 
-// CreateInteractionHandler processes interaction requests (like, ping, approval)
+// CreateInteractionHandler processes interaction requests (like, ping, approval, etc.)
 func (c *InteractionController) CreateInteractionHandler(w http.ResponseWriter, r *http.Request) {
 	var request struct {
-		SenderHandle    string `json:"senderHandle"`
-		ReceiverHandle  string `json:"receiverHandle"`
-		InteractionType string `json:"interactionType"` // like, ping
-		Action          string `json:"action"`          // like, dislike, approve, reject
+		SenderHandle    string  `json:"senderHandle"`
+		ReceiverHandle  string  `json:"receiverHandle"`
+		InteractionType string  `json:"interactionType"` // like, ping, invite
+		Action          string  `json:"action"`          // like, dislike, approve, reject
+		Message         *string `json:"message,omitempty"`
 	}
 
 	// Decode request body
@@ -34,8 +35,15 @@ func (c *InteractionController) CreateInteractionHandler(w http.ResponseWriter, 
 		return
 	}
 
-	// Process interaction
-	err := c.InteractionService.CreateOrUpdateInteraction(context.Background(), request.SenderHandle, request.ReceiverHandle, request.InteractionType, request.Action)
+	// Process interaction dynamically
+	err := c.InteractionService.CreateOrUpdateInteraction(
+		context.Background(),
+		request.SenderHandle,
+		request.ReceiverHandle,
+		request.InteractionType,
+		request.Action,
+		request.Message, // Pass optional message if available
+	)
 	if err != nil {
 		http.Error(w, "Failed to process interaction: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -43,21 +51,21 @@ func (c *InteractionController) CreateInteractionHandler(w http.ResponseWriter, 
 
 	// Send success response
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"message": "Interaction processed successfully"}`))
+	json.NewEncoder(w).Encode(map[string]string{"message": "Interaction processed successfully"})
 }
 
 // GetUserInteractionsHandler fetches interactions for a specific user
 func (c *InteractionController) GetUserInteractionsHandler(w http.ResponseWriter, r *http.Request) {
-	user := r.URL.Query().Get("userHandle")
+	userHandle := r.URL.Query().Get("userHandle")
 
 	// Validate input
-	if user == "" {
+	if userHandle == "" {
 		http.Error(w, "Missing userHandle parameter", http.StatusBadRequest)
 		return
 	}
 
 	// Fetch interactions
-	interactions, err := c.InteractionService.GetUserInteractions(context.Background(), user)
+	interactions, err := c.InteractionService.GetUserInteractions(context.Background(), userHandle)
 	if err != nil {
 		http.Error(w, "Failed to fetch interactions: "+err.Error(), http.StatusInternalServerError)
 		return
