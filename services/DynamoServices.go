@@ -349,6 +349,7 @@ func (s *DynamoService) QueryItemsWithFilters(
 	keyCondition string,
 	expressionValues map[string]types.AttributeValue,
 	expressionNames map[string]string,
+	filterExpression string, // ✅ Added filterExpression as a parameter
 ) ([]map[string]types.AttributeValue, error) {
 
 	// Define the QueryInput
@@ -358,16 +359,13 @@ func (s *DynamoService) QueryItemsWithFilters(
 		ExpressionAttributeValues: expressionValues,
 	}
 
-	// Add FilterExpression if provided
+	// Add ExpressionAttributeNames if provided
 	if len(expressionNames) > 0 {
 		input.ExpressionAttributeNames = expressionNames
-		filterExpression := ""
-		for alias, field := range expressionNames {
-			if filterExpression != "" {
-				filterExpression += " AND "
-			}
-			filterExpression += fmt.Sprintf("%s = :%s", alias, field)
-		}
+	}
+
+	// ✅ Use filterExpression only if provided
+	if filterExpression != "" {
 		input.FilterExpression = aws.String(filterExpression)
 	}
 

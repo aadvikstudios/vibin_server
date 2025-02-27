@@ -356,7 +356,7 @@ func (ups *UserProfileService) GetUserProfileByHandle(ctx context.Context, userH
 	return &profile, nil
 }
 
-// GetInteractedUsers retrieves users who have interacted (liked, pinged, matched) with a specific user.
+// GetInteractedUsers retrieves users who have interacted (liked, disliked, etc.) with a specific user.
 func (s *InteractionService) GetInteractedUsers(ctx context.Context, userHandle string, interactionTypes []string) ([]string, error) {
 	log.Printf("🔍 Fetching interacted users for: %s with types: %v", userHandle, interactionTypes)
 
@@ -366,21 +366,20 @@ func (s *InteractionService) GetInteractedUsers(ctx context.Context, userHandle 
 		":user": &types.AttributeValueMemberS{Value: "USER#" + userHandle},
 	}
 
-	// Create a filter expression to include only specified interaction types
-	var filterExpression string
+	// Create dynamic filter expression for interaction types
+	var filterExpressions []string
+	expressionNames := map[string]string{"#interactionType": "interactionType"}
+
 	for i, interactionType := range interactionTypes {
 		paramName := fmt.Sprintf(":interactionType%d", i)
 		expressionValues[paramName] = &types.AttributeValueMemberS{Value: interactionType}
-
-		if filterExpression == "" {
-			filterExpression = "interactionType = " + paramName
-		} else {
-			filterExpression += " OR interactionType = " + paramName
-		}
+		filterExpressions = append(filterExpressions, fmt.Sprintf("#interactionType = %s", paramName))
 	}
 
-	// Query DynamoDB
-	items, err := s.Dynamo.QueryItemsWithFilters(ctx, models.InteractionsTable, keyCondition, expressionValues, map[string]string{"#interactionType": "interactionType"})
+	// ✅ Ensure filterExpression is USED when calling QueryItemsWithFilters
+	filterExpression := strings.Join(filterExpressions, " OR ")
+
+	items, err := s.Dynamo.QueryItemsWithFilters(ctx, models.InteractionsTable, keyCondition, expressionValues, expressionNames, filterExpression)
 	if err != nil {
 		log.Printf("❌ Error querying interactions: %v", err)
 		return nil, fmt.Errorf("failed to fetch interacted users: %w", err)
