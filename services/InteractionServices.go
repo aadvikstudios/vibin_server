@@ -134,7 +134,7 @@ func (s *InteractionService) GetInteraction(ctx context.Context, sender, receive
 		":interactionType": &types.AttributeValueMemberS{Value: interactionType},
 	}
 
-	items, err := s.Dynamo.QueryItemsWithIndex(ctx, models.InteractionsTable, models.UsersIndex, keyCondition, expressionValues, nil, 1)
+	items, err := s.Dynamo.QueryItemsWithIndex(ctx, models.InteractionsTable, models.UserLookupIndex, keyCondition, expressionValues, nil, 1)
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +166,7 @@ func (s *InteractionService) GetUserInteractions(ctx context.Context, userHandle
 		":user": &types.AttributeValueMemberS{Value: userHandle},
 	}
 
-	items, err := s.Dynamo.QueryItemsWithIndex(ctx, models.InteractionsTable, models.UsersIndex, keyCondition, expressionValues, nil, 100)
+	items, err := s.Dynamo.QueryItemsWithIndex(ctx, models.InteractionsTable, models.UserLookupIndex, keyCondition, expressionValues, nil, 100)
 	if err != nil {
 		return nil, err
 	}
@@ -180,24 +180,24 @@ func (s *InteractionService) GetUserInteractions(ctx context.Context, userHandle
 	return interactions, nil
 }
 
-// ✅ GetInteractedUsers retrieves users who match the given interaction types
+// ✅ GetInteractedUsers retrieves users who have interacted (liked/disliked)
 func (s *InteractionService) GetInteractedUsers(ctx context.Context, userHandle string, interactionTypes []string) (map[string]bool, error) {
 	log.Printf("🔍 Fetching interactions of types %v for user: %s", interactionTypes, userHandle)
 
-	// ✅ Query using userLookup instead of users (Fix for GSI)
+	// 🔹 Step 1: Use `userLookup` for querying instead of `users`
 	keyCondition := "userLookup = :user"
 	expressionAttributeValues := map[string]types.AttributeValue{
 		":user": &types.AttributeValueMemberS{Value: userHandle},
 	}
 
-	// ✅ Fetch interactions from DynamoDB using correct GSI
-	items, err := s.Dynamo.QueryItemsWithIndex(ctx, models.InteractionsTable, models.UsersIndex, keyCondition, expressionAttributeValues, nil, 100)
+	// 🔹 Step 2: Query the `users-index` (which now uses `userLookup` as PK)
+	items, err := s.Dynamo.QueryItemsWithIndex(ctx, models.InteractionsTable, models.UserLookupIndex, keyCondition, expressionAttributeValues, nil, 100)
 	if err != nil {
 		log.Printf("❌ Error querying interactions: %v", err)
 		return nil, fmt.Errorf("failed to fetch interactions: %w", err)
 	}
 
-	// ✅ Filter interactions by interactionTypes
+	// 🔹 Step 3: Filter interactions based on interactionTypes
 	interactedUsers := make(map[string]bool)
 	for _, item := range items {
 		var interaction models.Interaction
@@ -206,7 +206,7 @@ func (s *InteractionService) GetInteractedUsers(ctx context.Context, userHandle 
 			continue
 		}
 
-		// ✅ Only store users with relevant interaction types
+		// 🔹 Only include interactions matching the specified types
 		if contains(interactionTypes, interaction.InteractionType) {
 			for _, user := range interaction.Users {
 				if user != userHandle { // ✅ Store only the other user

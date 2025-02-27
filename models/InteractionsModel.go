@@ -25,7 +25,7 @@ type Interaction struct {
 const InteractionsTable = "Interactions"
 
 // ✅ Define GSI for querying interactions by user (NEW PARTITION KEY)
-const UsersIndex = "users-index" // PK: userLookup
+const UserLookupIndex = "userLookup-index" // PK: userLookup
 
 // ✅ Define GSI for querying interactions by sender
 const SenderHandleIndex = "senderHandle-index" // PK: senderHandle
