@@ -15,48 +15,29 @@ type MatchService struct {
 	Dynamo *DynamoService
 }
 
-// FetchMatches queries the Matches table using both indexes
+// FetchMatches retrieves matches for a user (including private and group chats)
 func (s *MatchService) FetchMatches(ctx context.Context, userHandle string) ([]models.Match, error) {
 	var matches []models.Match
 
-	// ✅ Query user1Handle-index
-	log.Printf("🔍 Querying matches where userHandle is user1Handle: %s", userHandle)
-	user1Condition := "user1Handle = :userHandle"
+	log.Printf("🔍 Querying matches where userHandle is in Users array: %s", userHandle)
+
+	// Use `Users` array to find matches for the user
+	keyCondition := "contains(users, :userHandle)"
 	expressionValues := map[string]types.AttributeValue{
 		":userHandle": &types.AttributeValueMemberS{Value: userHandle},
 	}
 
-	user1Matches, err := s.Dynamo.QueryItemsWithIndex(ctx, models.MatchesTable, "user1Handle-index", user1Condition, expressionValues, nil, 100)
+	matchItems, err := s.Dynamo.QueryItemsWithOptions(ctx, models.MatchesTable, keyCondition, expressionValues, nil, 100, true)
 	if err != nil {
-		log.Printf("❌ Error querying user1Handle-index: %v", err)
+		log.Printf("❌ Error querying Matches table: %v", err)
 		return nil, err
 	}
 
-	// ✅ Unmarshal results
-	for _, item := range user1Matches {
+	// Unmarshal results
+	for _, item := range matchItems {
 		var match models.Match
 		if err := attributevalue.UnmarshalMap(item, &match); err != nil {
-			log.Printf("❌ Error unmarshalling match from user1Handle-index: %v", err)
-			continue
-		}
-		matches = append(matches, match)
-	}
-
-	// ✅ Query user2Handle-index
-	log.Printf("🔍 Querying matches where userHandle is user2Handle: %s", userHandle)
-	user2Condition := "user2Handle = :userHandle"
-
-	user2Matches, err := s.Dynamo.QueryItemsWithIndex(ctx, models.MatchesTable, "user2Handle-index", user2Condition, expressionValues, nil, 100)
-	if err != nil {
-		log.Printf("❌ Error querying user2Handle-index: %v", err)
-		return nil, err
-	}
-
-	// ✅ Unmarshal results
-	for _, item := range user2Matches {
-		var match models.Match
-		if err := attributevalue.UnmarshalMap(item, &match); err != nil {
-			log.Printf("❌ Error unmarshalling match from user2Handle-index: %v", err)
+			log.Printf("❌ Error unmarshalling match: %v", err)
 			continue
 		}
 		matches = append(matches, match)
@@ -66,70 +47,63 @@ func (s *MatchService) FetchMatches(ctx context.Context, userHandle string) ([]m
 	return matches, nil
 }
 
-// ✅ Enrich Matches with User Profiles
+// Enrich Matches with User Profiles
 func (s *MatchService) EnrichMatchesWithProfiles(ctx context.Context, userHandle string, matches []models.MatchWithProfile) ([]models.MatchWithProfile, error) {
 	var enrichedMatches []models.MatchWithProfile
 
 	for _, match := range matches {
-		// Determine the other user handle
-		otherUserHandle := match.User1Handle
-		if match.User1Handle == userHandle {
-			otherUserHandle = match.User2Handle
+		// Fetch profiles for all users in the match
+		var userProfiles []models.UserProfile
+		for _, user := range match.Users {
+			if user == userHandle {
+				continue // Skip current user
+			}
+
+			// Fetch user profile
+			userProfileKey := map[string]types.AttributeValue{
+				"userhandle": &types.AttributeValueMemberS{Value: user},
+			}
+
+			userProfileItem, err := s.Dynamo.GetItem(ctx, models.UserProfilesTable, userProfileKey)
+			if err != nil {
+				log.Printf("⚠️ Warning: Failed to fetch profile for %s: %v", user, err)
+				continue
+			}
+
+			// Convert profile data from DynamoDB to struct
+			var userProfileData models.UserProfile
+			err = attributevalue.UnmarshalMap(userProfileItem, &userProfileData)
+			if err != nil {
+				log.Printf("⚠️ Warning: Failed to parse profile data for %s: %v", user, err)
+				continue
+			}
+
+			userProfiles = append(userProfiles, userProfileData)
 		}
 
-		// Fetch the other user's profile
-		userProfileKey := map[string]types.AttributeValue{
-			"userhandle": &types.AttributeValueMemberS{Value: otherUserHandle},
-		}
-
-		userProfileItem, err := s.Dynamo.GetItem(ctx, models.UserProfilesTable, userProfileKey)
-		if err != nil {
-			log.Printf("⚠️ Warning: Failed to fetch profile for %s: %v", otherUserHandle, err)
-			continue
-		}
-
-		// Convert profile data from DynamoDB to struct
-		var userProfileData models.UserProfile
-		err = attributevalue.UnmarshalMap(userProfileItem, &userProfileData)
-		if err != nil {
-			log.Printf("⚠️ Warning: Failed to parse profile data for %s: %v", otherUserHandle, err)
-			continue
-		}
-
-		// ✅ Update the existing match object with profile data
-		match.Name = userProfileData.Name
-		match.UserName = userProfileData.UserName
-		match.Age = userProfileData.Age
-		match.Gender = userProfileData.Gender
-		match.Orientation = userProfileData.Orientation
-		match.LookingFor = userProfileData.LookingFor
-		match.Photos = userProfileData.Photos
-		match.Bio = userProfileData.Bio
-		match.Interests = userProfileData.Interests
-		match.Questionnaire = userProfileData.Questionnaire
-
+		// Update match object with profile data
+		match.UserProfiles = userProfiles
 		enrichedMatches = append(enrichedMatches, match)
 	}
 
 	return enrichedMatches, nil
 }
 
-// ✅ Fetch Matches & Enrich with Profile, Last Message & Unread Status
-// ✅ Fetch Matches & Enrich with Profile, Last Message & Unread Status
+// Fetch Matches & Enrich with Profile, Last Message & Unread Status
 func (s *MatchService) GetMatchesByUserHandle(ctx context.Context, userHandle string) ([]models.MatchWithProfile, error) {
-	// ✅ Step 1: Fetch Matches
+	// Fetch Matches
 	matches, err := s.FetchMatches(ctx, userHandle)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch matches: %w", err)
 	}
 
-	// ✅ Step 2: Fetch Last Message & Unread Status for Each Match
+	// Fetch Last Message & Unread Status for Each Match
 	matchesWithMessages, err := s.AttachLastMessageAndUnreadStatus(ctx, userHandle, matches)
 	if err != nil {
 		return nil, fmt.Errorf("failed to attach last message: %w", err)
 	}
 
-	// ✅ Step 3: Fetch User Profiles (Pass matchesWithMessages instead of matches)
+	// Fetch User Profiles
 	enrichedMatches, err := s.EnrichMatchesWithProfiles(ctx, userHandle, matchesWithMessages)
 	if err != nil {
 		return nil, fmt.Errorf("failed to enrich matches with profiles: %w", err)
@@ -138,12 +112,12 @@ func (s *MatchService) GetMatchesByUserHandle(ctx context.Context, userHandle st
 	return enrichedMatches, nil
 }
 
-// ✅ Fetch the Last Message & Unread Status for Each Match
+// Attach Last Message & Unread Status for Each Match
 func (s *MatchService) AttachLastMessageAndUnreadStatus(ctx context.Context, userHandle string, matches []models.Match) ([]models.MatchWithProfile, error) {
 	var enrichedMatches []models.MatchWithProfile
 
 	for _, match := range matches {
-		// ✅ Query latest message for the match
+		// Query latest message for the match
 		lastMessage, isUnread, err := s.FetchLastMessageAndUnread(ctx, match.MatchID, userHandle)
 		if err != nil {
 			log.Printf("⚠️ Warning: Failed to fetch last message for MatchID %s: %v", match.MatchID, err)
@@ -151,11 +125,11 @@ func (s *MatchService) AttachLastMessageAndUnreadStatus(ctx context.Context, use
 			isUnread = false
 		}
 
-		// ✅ Convert match to MatchWithProfile
+		// Convert match to MatchWithProfile
 		enrichedMatch := models.MatchWithProfile{
 			MatchID:     match.MatchID,
-			User1Handle: match.User1Handle,
-			User2Handle: match.User2Handle,
+			Users:       match.Users,
+			Type:        match.Type,
 			Status:      match.Status,
 			CreatedAt:   match.CreatedAt,
 			LastMessage: lastMessage,
@@ -168,11 +142,11 @@ func (s *MatchService) AttachLastMessageAndUnreadStatus(ctx context.Context, use
 	return enrichedMatches, nil
 }
 
-// ✅ Fetch Last Message & Unread Status for a Match
+// Fetch Last Message & Unread Status for a Match
 func (s *MatchService) FetchLastMessageAndUnread(ctx context.Context, matchID string, userHandle string) (string, bool, error) {
 	log.Printf("🔍 Fetching last message & unread status for MatchID: %s", matchID)
 
-	// ✅ Query Latest Message from DynamoDB
+	// Query Latest Message from DynamoDB
 	keyCondition := "#matchId = :matchId"
 	expressionValues := map[string]types.AttributeValue{
 		":matchId": &types.AttributeValueMemberS{Value: matchID},
@@ -191,7 +165,7 @@ func (s *MatchService) FetchLastMessageAndUnread(ctx context.Context, matchID st
 		return "", false, nil // No messages found
 	}
 
-	// ✅ Unmarshal Last Message
+	// Unmarshal Last Message
 	var lastMessage models.Message
 	err = attributevalue.UnmarshalMap(messages[0], &lastMessage)
 	if err != nil {
@@ -199,7 +173,7 @@ func (s *MatchService) FetchLastMessageAndUnread(ctx context.Context, matchID st
 		return "", false, err
 	}
 
-	// ✅ Check Unread Status (if sender is NOT the current user)
+	// Check Unread Status (if sender is NOT the current user)
 	isUnread := lastMessage.IsUnread == "true" && lastMessage.SenderID != userHandle
 
 	log.Printf("✅ Last message: %s, IsUnread: %v", lastMessage.Content, isUnread)

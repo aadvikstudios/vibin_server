@@ -13,20 +13,19 @@ import (
 	"github.com/google/uuid"
 )
 
+// InteractionService handles interactions (like, ping, and matches)
 type InteractionService struct {
 	Dynamo *DynamoService
 }
 
-// SaveInteraction handles like and ping interactions
-func (s *InteractionService) SaveInteraction(ctx context.Context, senderHandle, receiverHandle, interactionType, message string) error {
-	// Define the sort key
-	sortKey := senderHandle + "#" + interactionType
+// SaveInteraction handles "like" and "ping" interactions
+func (s *InteractionService) SaveInteraction(ctx context.Context, sender, receiver, interactionType, message string) error {
+	sortKey := sender + "#" + interactionType
 
-	// Create an interaction record
 	interaction := models.Interaction{
-		ReceiverHandle: receiverHandle,
+		ReceiverHandle: receiver,
 		SortKey:        sortKey,
-		SenderHandle:   senderHandle,
+		SenderHandle:   sender,
 		Type:           interactionType,
 		Status:         "pending",
 		CreatedAt:      time.Now().Format(time.RFC3339),
@@ -39,65 +38,219 @@ func (s *InteractionService) SaveInteraction(ctx context.Context, senderHandle, 
 
 	log.Printf("📥 Saving interaction: %+v", interaction)
 
-	// Save the interaction
 	if err := s.Dynamo.PutItem(ctx, models.InteractionsTable, interaction); err != nil {
 		log.Printf("❌ Failed to save interaction: %v", err)
 		return fmt.Errorf("failed to save interaction: %w", err)
 	}
 
-	log.Printf("✅ Interaction recorded: %s -> %s (%s)", senderHandle, receiverHandle, interactionType)
+	log.Printf("✅ Interaction recorded: %s -> %s (%s)", sender, receiver, interactionType)
 
 	// Handle match scenario
 	if interactionType == "like" {
-		isMatch, err := s.IsMatch(ctx, senderHandle, receiverHandle)
+		isMatch, err := s.IsMatch(ctx, sender, receiver)
 		if err != nil {
 			log.Printf("⚠️ Error checking for match: %v", err)
 			return nil
 		}
 		if isMatch {
-			return s.HandleMatchWithUpdate(ctx, senderHandle, receiverHandle, "")
+			return s.HandleMatchWithUpdate(ctx, []string{sender, receiver}, "")
 		}
 	}
 
 	return nil
 }
 
-// HandleMatchWithUpdate updates interaction statuses, creates a match, and inserts a message
-func (s *InteractionService) HandleMatchWithUpdate(ctx context.Context, user1, user2, message string) error {
-	log.Printf("🎉 Creating match between %s ❤️ %s", user1, user2)
+// IsMatch checks if two users have liked each other
+func (s *InteractionService) IsMatch(ctx context.Context, senderHandle, receiverHandle string) (bool, error) {
+	log.Printf("🔍 Checking match status for %s and %s", senderHandle, receiverHandle)
 
-	// Update interaction statuses
-	if err := s.UpdateInteractionStatus(ctx, user1, user2, "match", "like"); err != nil {
-		log.Printf("⚠️ Error updating status for %s -> %s: %v", user1, user2, err)
-	}
-	if err := s.UpdateInteractionStatus(ctx, user2, user1, "match", "like"); err != nil {
-		log.Printf("⚠️ Error updating status for %s -> %s: %v", user2, user1, err)
-	}
-
-	err := s.HandleMatch(ctx, user1, user2, message)
+	hasReceiverLiked, err := s.HasUserLiked(ctx, receiverHandle, senderHandle)
 	if err != nil {
-		return err
+		log.Printf("❌ Error checking if %s liked %s: %v", receiverHandle, senderHandle, err)
+		return false, nil
 	}
 
-	return nil
+	if hasReceiverLiked {
+		log.Printf("🎉 Match confirmed: %s ❤️ %s", senderHandle, receiverHandle)
+		return true, nil
+	}
+
+	log.Printf("⚠️ No match yet for %s and %s", senderHandle, receiverHandle)
+	return false, nil
 }
 
-// HandleMatch updates interaction statuses, creates a match, and inserts a message
-func (s *InteractionService) HandleMatch(ctx context.Context, user1, user2, message string) error {
-	log.Printf("🎉 Creating match between %s ❤️ %s", user1, user2)
+// HasUserLiked checks if a user has already liked another user
+func (s *InteractionService) HasUserLiked(ctx context.Context, receiverHandle, senderHandle string) (bool, error) {
+	log.Printf("🔍 Checking if %s has liked %s", receiverHandle, senderHandle)
 
-	// Create match entry
-	matchID, err := s.CreateMatch(ctx, user1, user2)
+	keyCondition := "senderHandle = :sender"
+	expressionValues := map[string]types.AttributeValue{
+		":sender": &types.AttributeValueMemberS{Value: receiverHandle},
+	}
+
+	items, err := s.Dynamo.QueryItemsWithIndex(ctx, models.InteractionsTable, "senderHandle-index", keyCondition, expressionValues, nil, 100)
 	if err != nil {
-		return err
+		log.Printf("❌ Error querying interactions: %v", err)
+		return false, nil
 	}
 
-	// Insert initial message (empty for mutual like, contains message for ping approval)
-	if err := s.SendInitialMessage(ctx, matchID, user1, user2, message); err != nil {
-		return err
+	for _, item := range items {
+		var interaction models.Interaction
+		err := attributevalue.UnmarshalMap(item, &interaction)
+		if err != nil {
+			continue
+		}
+
+		if interaction.ReceiverHandle == senderHandle && interaction.Type == "like" {
+			return true, nil
+		}
 	}
 
-	return nil
+	return false, nil
+}
+
+// HandleMatchWithUpdate ensures match creation and updates statuses
+func (s *InteractionService) HandleMatchWithUpdate(ctx context.Context, users []string, message string) error {
+	log.Printf("🎉 Creating match for users: %v", users)
+
+	// ✅ Update interaction statuses for all users
+	for _, user := range users {
+		for _, otherUser := range users {
+			if user != otherUser {
+				if err := s.UpdateInteractionStatus(ctx, user, otherUser, "match", "like"); err != nil {
+					log.Printf("⚠️ Error updating status for %s -> %s: %v", user, otherUser, err)
+				}
+			}
+		}
+	}
+
+	return s.HandleMatch(ctx, users, message)
+}
+
+// ✅ GetLikedOrDislikedUsers now correctly fetches interactions using GSI
+func (s *InteractionService) GetLikedOrDislikedUsers(ctx context.Context, senderHandle string) (map[string]bool, error) {
+	log.Printf("🔍 Fetching interactions for %s", senderHandle)
+
+	// ✅ Query interactions where senderHandle = senderHandle
+	keyCondition := "senderHandle = :sender"
+	expressionValues := map[string]types.AttributeValue{
+		":sender": &types.AttributeValueMemberS{Value: senderHandle},
+	}
+
+	// ✅ Use GSI (senderHandle-index) for efficient querying
+	items, err := s.Dynamo.QueryItemsWithIndex(ctx, models.InteractionsTable, "senderHandle-index", keyCondition, expressionValues, nil, 100)
+	if err != nil {
+		log.Printf("❌ Error querying interactions: %v", err)
+		return nil, fmt.Errorf("failed to fetch interactions: %w", err)
+	}
+
+	likedDislikedUsers := make(map[string]bool)
+	for _, item := range items {
+		var interaction models.Interaction
+		err := attributevalue.UnmarshalMap(item, &interaction)
+		if err != nil {
+			log.Printf("❌ Error unmarshalling interaction: %v", err)
+			continue
+		}
+		likedDislikedUsers[interaction.ReceiverHandle] = true
+	}
+
+	log.Printf("✅ Found %d interactions for %s", len(likedDislikedUsers), senderHandle)
+	return likedDislikedUsers, nil
+}
+
+func (s *InteractionService) GetInteractionsByReceiverHandle(ctx context.Context, receiverHandle string) ([]models.InteractionWithProfile, error) {
+	log.Printf("🔍 Querying interactions where receiverHandle = %s", receiverHandle)
+
+	// ✅ Fetch interactions for the given receiverHandle
+	interactions, err := s.GetInteractionsForReceiver(ctx, receiverHandle)
+	if err != nil {
+		log.Printf("❌ Error fetching interactions: %v", err)
+		return nil, err
+	}
+
+	log.Printf("✅ Found %d interactions for receiverHandle: %s", len(interactions), receiverHandle)
+
+	// ✅ Enrich interactions with user profile data
+	return s.EnrichInteractionsWithProfiles(ctx, interactions)
+}
+
+// ✅ Fetch user profiles for interactions and merge them
+func (s *InteractionService) EnrichInteractionsWithProfiles(ctx context.Context, interactions []models.Interaction) ([]models.InteractionWithProfile, error) {
+	var enrichedInteractions []models.InteractionWithProfile
+
+	for _, interaction := range interactions {
+		// Fetch sender's profile from UserProfiles table
+		userProfileKey := map[string]types.AttributeValue{
+			"userhandle": &types.AttributeValueMemberS{Value: interaction.SenderHandle},
+		}
+
+		userProfileItem, err := s.Dynamo.GetItem(ctx, models.UserProfilesTable, userProfileKey)
+		if err != nil {
+			log.Printf("⚠️ Warning: Failed to fetch profile for %s: %v", interaction.SenderHandle, err)
+			userProfileItem = map[string]types.AttributeValue{} // Empty profile
+		}
+
+		// Convert profile data from DynamoDB to struct
+		var userProfileData models.UserProfile
+		err = attributevalue.UnmarshalMap(userProfileItem, &userProfileData)
+		if err != nil {
+			log.Printf("⚠️ Warning: Failed to parse profile data for %s: %v", interaction.SenderHandle, err)
+			continue
+		}
+
+		// ✅ Merge interaction and profile data
+		combinedData := models.InteractionWithProfile{
+			ReceiverHandle: interaction.ReceiverHandle,
+			SenderHandle:   interaction.SenderHandle,
+			Type:           interaction.Type,
+			Message: func() string { // ✅ Safely handle *string
+				if interaction.Message != nil {
+					return *interaction.Message
+				}
+				return ""
+			}(),
+			Status:    interaction.Status,
+			CreatedAt: interaction.CreatedAt,
+
+			// Profile Fields
+			Name:          userProfileData.Name,
+			UserName:      userProfileData.UserName,
+			Age:           userProfileData.Age,
+			Gender:        userProfileData.Gender,
+			Orientation:   userProfileData.Orientation,
+			LookingFor:    userProfileData.LookingFor,
+			Photos:        userProfileData.Photos,
+			Bio:           userProfileData.Bio,
+			Interests:     userProfileData.Interests,
+			Questionnaire: userProfileData.Questionnaire,
+		}
+
+		enrichedInteractions = append(enrichedInteractions, combinedData)
+	}
+
+	return enrichedInteractions, nil
+}
+
+// ✅ Fetch interactions from DynamoDB
+func (s *InteractionService) GetInteractionsForReceiver(ctx context.Context, receiverHandle string) ([]models.Interaction, error) {
+	keyCondition := "receiverHandle = :receiver"
+	expressionValues := map[string]types.AttributeValue{
+		":receiver": &types.AttributeValueMemberS{Value: receiverHandle},
+	}
+
+	items, err := s.Dynamo.QueryItems(ctx, models.InteractionsTable, keyCondition, expressionValues, nil, 100)
+	if err != nil {
+		return nil, err
+	}
+
+	var interactions []models.Interaction
+	err = attributevalue.UnmarshalListOfMaps(items, &interactions)
+	if err != nil {
+		return nil, err
+	}
+
+	return interactions, nil
 }
 
 // UpdateInteractionStatus ensures an existing record is updated instead of inserting a new one
@@ -169,65 +322,39 @@ func (s *InteractionService) GetPingMessage(ctx context.Context, senderHandle, r
 	return "", nil // No message found
 }
 
-// IsMatch checks if two users have liked each other
-func (s *InteractionService) IsMatch(ctx context.Context, senderHandle, receiverHandle string) (bool, error) {
-	log.Printf("🔍 Checking match status for %s and %s", senderHandle, receiverHandle)
+// HandleMatch creates a match and inserts an initial message
+func (s *InteractionService) HandleMatch(ctx context.Context, users []string, message string) error {
+	log.Printf("🎉 Creating match for users: %v", users)
 
-	hasReceiverLiked, err := s.HasUserLiked(ctx, receiverHandle, senderHandle)
+	matchID, err := s.CreateMatch(ctx, users)
 	if err != nil {
-		log.Printf("❌ Error checking if %s liked %s: %v", receiverHandle, senderHandle, err)
-		return false, nil
+		return err
 	}
 
-	if hasReceiverLiked {
-		log.Printf("🎉 Match confirmed: %s ❤️ %s", senderHandle, receiverHandle)
-		return true, nil
-	}
-
-	log.Printf("⚠️ No match yet for %s and %s", senderHandle, receiverHandle)
-	return false, nil
-}
-
-// HasUserLiked checks if a user has already liked another user
-func (s *InteractionService) HasUserLiked(ctx context.Context, receiverHandle, senderHandle string) (bool, error) {
-	log.Printf("🔍 Checking if %s has liked %s", receiverHandle, senderHandle)
-
-	keyCondition := "senderHandle = :sender"
-	expressionValues := map[string]types.AttributeValue{
-		":sender": &types.AttributeValueMemberS{Value: receiverHandle},
-	}
-
-	items, err := s.Dynamo.QueryItemsWithIndex(ctx, models.InteractionsTable, "senderHandle-index", keyCondition, expressionValues, nil, 100)
-	if err != nil {
-		log.Printf("❌ Error querying interactions: %v", err)
-		return false, nil
-	}
-
-	for _, item := range items {
-		var interaction models.Interaction
-		err := attributevalue.UnmarshalMap(item, &interaction)
-		if err != nil {
-			continue
-		}
-
-		if interaction.ReceiverHandle == senderHandle && interaction.Type == "like" {
-			return true, nil
+	// Insert initial message if needed
+	if message != "" {
+		if err := s.SendInitialMessage(ctx, matchID, users[0], message); err != nil {
+			return err
 		}
 	}
 
-	return false, nil
+	return nil
 }
 
-// CreateMatch inserts a match record in the Matches table
-func (s *InteractionService) CreateMatch(ctx context.Context, user1, user2 string) (string, error) {
+// ✅ Create a Match (Now supports Groups)
+func (s *InteractionService) CreateMatch(ctx context.Context, users []string) (string, error) {
 	matchID := uuid.New().String()
 
 	match := models.Match{
-		MatchID:     matchID,
-		User1Handle: user1,
-		User2Handle: user2,
-		Status:      "active",
-		CreatedAt:   time.Now().Format(time.RFC3339),
+		MatchID:   matchID,
+		Users:     users,     // ✅ Store all participants
+		Type:      "private", // Default to private chat
+		Status:    "active",
+		CreatedAt: time.Now().Format(time.RFC3339),
+	}
+
+	if len(users) > 2 {
+		match.Type = "group" // ✅ Convert to group chat
 	}
 
 	if err := s.Dynamo.PutItem(ctx, models.MatchesTable, match); err != nil {
@@ -238,18 +365,17 @@ func (s *InteractionService) CreateMatch(ctx context.Context, user1, user2 strin
 	return matchID, nil
 }
 
-func (s *InteractionService) SendInitialMessage(ctx context.Context, matchID, senderHandle, receiverHandle, message string) error {
+// ✅ Send Initial Message (Now supports multiple users)
+func (s *InteractionService) SendInitialMessage(ctx context.Context, matchID, sender, message string) error {
 	messageID := uuid.New().String()
 	createdAt := time.Now().Format(time.RFC3339)
-
-	// If no message was provided (mutual like case), use a default message
 
 	newMessage := models.Message{
 		MatchID:   matchID,
 		MessageID: messageID,
-		SenderID:  senderHandle,
+		SenderID:  sender,
 		Content:   message,
-		IsUnread:  "true", // ✅ Store as string "true"
+		IsUnread:  "true",
 		Liked:     false,
 		CreatedAt: createdAt,
 	}
@@ -262,128 +388,79 @@ func (s *InteractionService) SendInitialMessage(ctx context.Context, matchID, se
 	return nil
 }
 
-// ✅ GetLikedOrDislikedUsers now correctly fetches interactions using GSI
-func (s *InteractionService) GetLikedOrDislikedUsers(ctx context.Context, senderHandle string) (map[string]bool, error) {
-	log.Printf("🔍 Fetching interactions for %s", senderHandle)
+// ✅ Fetch Matches by UserHandle
+func (s *InteractionService) FetchMatches(ctx context.Context, userHandle string) ([]models.Match, error) {
+	log.Printf("🔍 Fetching matches for %s", userHandle)
 
-	// ✅ Query interactions where senderHandle = senderHandle
-	keyCondition := "senderHandle = :sender"
+	keyCondition := "users CONTAINS :userHandle"
 	expressionValues := map[string]types.AttributeValue{
-		":sender": &types.AttributeValueMemberS{Value: senderHandle},
+		":userHandle": &types.AttributeValueMemberS{Value: userHandle},
 	}
 
-	// ✅ Use GSI (`senderHandle-index`) for efficient querying
-	items, err := s.Dynamo.QueryItemsWithIndex(ctx, models.InteractionsTable, "senderHandle-index", keyCondition, expressionValues, nil, 100)
+	items, err := s.Dynamo.QueryItems(ctx, models.MatchesTable, keyCondition, expressionValues, nil, 100)
 	if err != nil {
-		log.Printf("❌ Error querying interactions: %v", err)
-		return nil, fmt.Errorf("failed to fetch interactions: %w", err)
+		return nil, fmt.Errorf("failed to fetch matches: %w", err)
 	}
 
-	likedDislikedUsers := make(map[string]bool)
-	for _, item := range items {
-		var interaction models.Interaction
-		err := attributevalue.UnmarshalMap(item, &interaction)
-		if err != nil {
-			log.Printf("❌ Error unmarshalling interaction: %v", err)
-			continue
-		}
-		likedDislikedUsers[interaction.ReceiverHandle] = true
-	}
-
-	log.Printf("✅ Found %d interactions for %s", len(likedDislikedUsers), senderHandle)
-	return likedDislikedUsers, nil
-}
-
-func (s *InteractionService) GetInteractionsByReceiverHandle(ctx context.Context, receiverHandle string) ([]models.InteractionWithProfile, error) {
-	log.Printf("🔍 Querying interactions where receiverHandle = %s", receiverHandle)
-
-	// ✅ Fetch interactions for the given receiverHandle
-	interactions, err := s.GetInteractionsForReceiver(ctx, receiverHandle)
-	if err != nil {
-		log.Printf("❌ Error fetching interactions: %v", err)
-		return nil, err
-	}
-
-	log.Printf("✅ Found %d interactions for receiverHandle: %s", len(interactions), receiverHandle)
-
-	// ✅ Enrich interactions with user profile data
-	return s.EnrichInteractionsWithProfiles(ctx, interactions)
-}
-
-// ✅ Fetch interactions from DynamoDB
-func (s *InteractionService) GetInteractionsForReceiver(ctx context.Context, receiverHandle string) ([]models.Interaction, error) {
-	keyCondition := "receiverHandle = :receiver"
-	expressionValues := map[string]types.AttributeValue{
-		":receiver": &types.AttributeValueMemberS{Value: receiverHandle},
-	}
-
-	items, err := s.Dynamo.QueryItems(ctx, models.InteractionsTable, keyCondition, expressionValues, nil, 100)
+	var matches []models.Match
+	err = attributevalue.UnmarshalListOfMaps(items, &matches)
 	if err != nil {
 		return nil, err
 	}
 
-	var interactions []models.Interaction
-	err = attributevalue.UnmarshalListOfMaps(items, &interactions)
+	log.Printf("✅ Found %d matches for %s", len(matches), userHandle)
+	return matches, nil
+}
+
+// ✅ Fetch Matches with Profile Enrichment
+func (s *InteractionService) GetMatchesWithProfiles(ctx context.Context, userHandle string) ([]models.MatchWithProfile, error) {
+	matches, err := s.FetchMatches(ctx, userHandle)
 	if err != nil {
 		return nil, err
 	}
 
-	return interactions, nil
-}
-
-// ✅ Fetch user profiles for interactions and merge them
-func (s *InteractionService) EnrichInteractionsWithProfiles(ctx context.Context, interactions []models.Interaction) ([]models.InteractionWithProfile, error) {
-	var enrichedInteractions []models.InteractionWithProfile
-
-	for _, interaction := range interactions {
-		// Fetch sender's profile from UserProfiles table
-		userProfileKey := map[string]types.AttributeValue{
-			"userhandle": &types.AttributeValueMemberS{Value: interaction.SenderHandle},
+	var enrichedMatches []models.MatchWithProfile
+	for _, match := range matches {
+		userProfiles := []models.UserProfile{}
+		for _, user := range match.Users {
+			profile, err := s.FetchUserProfile(ctx, user)
+			if err == nil {
+				userProfiles = append(userProfiles, profile)
+			}
 		}
-
-		userProfileItem, err := s.Dynamo.GetItem(ctx, models.UserProfilesTable, userProfileKey)
-		if err != nil {
-			log.Printf("⚠️ Warning: Failed to fetch profile for %s: %v", interaction.SenderHandle, err)
-			userProfileItem = map[string]types.AttributeValue{} // Empty profile
-		}
-
-		// Convert profile data from DynamoDB to struct
-		var userProfileData models.UserProfile
-		err = attributevalue.UnmarshalMap(userProfileItem, &userProfileData)
-		if err != nil {
-			log.Printf("⚠️ Warning: Failed to parse profile data for %s: %v", interaction.SenderHandle, err)
-			continue
-		}
-
-		// ✅ Merge interaction and profile data
-		combinedData := models.InteractionWithProfile{
-			ReceiverHandle: interaction.ReceiverHandle,
-			SenderHandle:   interaction.SenderHandle,
-			Type:           interaction.Type,
-			Message: func() string { // ✅ Safely handle *string
-				if interaction.Message != nil {
-					return *interaction.Message
-				}
-				return ""
-			}(),
-			Status:    interaction.Status,
-			CreatedAt: interaction.CreatedAt,
-
-			// Profile Fields
-			Name:          userProfileData.Name,
-			UserName:      userProfileData.UserName,
-			Age:           userProfileData.Age,
-			Gender:        userProfileData.Gender,
-			Orientation:   userProfileData.Orientation,
-			LookingFor:    userProfileData.LookingFor,
-			Photos:        userProfileData.Photos,
-			Bio:           userProfileData.Bio,
-			Interests:     userProfileData.Interests,
-			Questionnaire: userProfileData.Questionnaire,
-		}
-
-		enrichedInteractions = append(enrichedInteractions, combinedData)
+		enrichedMatches = append(enrichedMatches, models.MatchWithProfile{
+			MatchID:      match.MatchID,
+			Users:        match.Users,
+			Type:         match.Type,
+			Status:       match.Status,
+			CreatedAt:    match.CreatedAt,
+			UserProfiles: userProfiles,
+		})
 	}
 
-	return enrichedInteractions, nil
+	return enrichedMatches, nil
+}
+
+// ✅ Fetch a User's Profile from DynamoDB
+func (s *InteractionService) FetchUserProfile(ctx context.Context, userHandle string) (models.UserProfile, error) {
+	log.Printf("🔍 Fetching profile for user: %s", userHandle)
+
+	key := map[string]types.AttributeValue{
+		"userhandle": &types.AttributeValueMemberS{Value: userHandle},
+	}
+
+	item, err := s.Dynamo.GetItem(ctx, models.UserProfilesTable, key)
+	if err != nil {
+		log.Printf("⚠️ Error fetching profile: %v", err)
+		return models.UserProfile{}, err
+	}
+
+	var profile models.UserProfile
+	err = attributevalue.UnmarshalMap(item, &profile)
+	if err != nil {
+		log.Printf("❌ Error unmarshalling profile: %v", err)
+		return models.UserProfile{}, err
+	}
+
+	return profile, nil
 }

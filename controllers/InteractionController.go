@@ -122,7 +122,7 @@ func (c *InteractionController) HandleApprovePing(w http.ResponseWriter, r *http
 	}
 
 	// ✅ Step 3: Create a match and insert the original ping message
-	if err := c.InteractionService.HandleMatch(ctx, request.SenderHandle, request.ReceiverHandle, originalMessage); err != nil {
+	if err := c.InteractionService.HandleMatch(ctx, []string{request.SenderHandle, request.ReceiverHandle}, originalMessage); err != nil {
 		log.Printf("❌ Failed to handle match creation: %v", err)
 		http.Error(w, `{"error": "Failed to create match"}`, http.StatusInternalServerError)
 		return

@@ -1,28 +1,18 @@
 package models
 
-// MatchWithProfile combines Match details with the other user's profile data
+// MatchWithProfile combines Match details with participants' profile data
 type MatchWithProfile struct {
 	// Match Fields
-	MatchID     string `dynamodbav:"matchId" json:"matchId"`
-	User1Handle string `dynamodbav:"user1Handle" json:"user1Handle"`
-	User2Handle string `dynamodbav:"user2Handle" json:"user2Handle"`
-	Status      string `dynamodbav:"status" json:"status"`
-	CreatedAt   string `dynamodbav:"createdAt" json:"createdAt"`
+	MatchID   string   `dynamodbav:"matchId" json:"matchId"`     // Unique matchId
+	Users     []string `dynamodbav:"users" json:"users"`         // List of users (supports groups)
+	Type      string   `dynamodbav:"type" json:"type"`           // "private" or "group"
+	Status    string   `dynamodbav:"status" json:"status"`       // active, archived
+	CreatedAt string   `dynamodbav:"createdAt" json:"createdAt"` // Timestamp of creation
 
-	// User Profile Fields (For Matched User)
-	Name            string            `json:"name,omitempty"`
-	UserName        string            `json:"username,omitempty"`
-	Age             int               `json:"age,omitempty"`
-	Gender          string            `json:"gender,omitempty"`
-	Orientation     string            `json:"orientation,omitempty"`
-	LookingFor      string            `json:"lookingFor,omitempty"`
-	Photos          []string          `json:"photos,omitempty"`
-	Bio             string            `json:"bio,omitempty"`
-	Interests       []string          `json:"interests,omitempty"`
-	DistanceBetween float64           `json:"distanceBetween,omitempty"`
-	Questionnaire   map[string]string `json:"questionnaire,omitempty"`
+	// User Profile Fields (For Participants)
+	UserProfiles []UserProfile `json:"userProfiles,omitempty"` // ✅ Uses existing UserProfile struct
+
 	// New Fields
 	LastMessage string `json:"lastMessage,omitempty"` // ✅ Last message content
 	IsUnread    bool   `json:"isUnread,omitempty"`    // ✅ If user has unread messages
-
 }
