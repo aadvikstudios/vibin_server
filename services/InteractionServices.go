@@ -23,7 +23,7 @@ func (s *InteractionService) CreateOrUpdateInteraction(ctx context.Context, send
 	log.Printf("🔄 Processing %s from %s -> %s", interactionType, sender, receiver)
 
 	// Check if an existing interaction exists
-	existingInteraction, err := s.GetInteraction(ctx, sender, receiver, interactionType)
+	existingInteraction, err := s.GetInteraction(ctx, sender, receiver)
 	if err != nil {
 		log.Printf("⚠️ Error fetching interaction: %v", err)
 		return err
@@ -34,24 +34,25 @@ func (s *InteractionService) CreateOrUpdateInteraction(ctx context.Context, send
 	var matchID *string
 
 	switch action {
-	case models.InteractionTypeLike:
-		if existingInteraction == nil {
-			newStatus = models.StatusPending
-		} else if existingInteraction.Status == models.StatusPending {
-			newStatus = models.StatusMatch
-			generatedMatchID := s.GenerateMatchID()
+	case "like":
+		newStatus = "pending"
+		// Check if User B also liked User A (Mutual Match)
+		mutualLike, _ := s.GetInteraction(ctx, receiver, sender)
+		if mutualLike != nil && mutualLike.Status == "pending" {
+			newStatus = "match"
+			generatedMatchID := uuid.New().String()
 			matchID = &generatedMatchID
 		}
-	case models.InteractionTypeDislike:
-		newStatus = models.StatusDeclined
-	case models.InteractionTypePing:
-		newStatus = models.StatusPending
-	case models.StatusApproved:
-		newStatus = models.StatusApproved
-		generatedMatchID := s.GenerateMatchID()
+	case "dislike":
+		newStatus = "declined"
+	case "ping":
+		newStatus = "pending"
+	case "approve":
+		newStatus = "match"
+		generatedMatchID := uuid.New().String()
 		matchID = &generatedMatchID
-	case models.StatusRejected:
-		newStatus = models.StatusRejected
+	case "reject":
+		newStatus = "rejected"
 	default:
 		return fmt.Errorf("❌ Unsupported interaction type: %s", interactionType)
 	}
@@ -62,23 +63,21 @@ func (s *InteractionService) CreateOrUpdateInteraction(ctx context.Context, send
 	}
 
 	// Otherwise, update existing interaction
-	return s.UpdateInteractionStatus(ctx, existingInteraction.InteractionID, newStatus, matchID, message)
+	return s.UpdateInteractionStatus(ctx, sender, receiver, newStatus, matchID, message)
 }
 
 // CreateInteraction inserts a new interaction into DynamoDB
 func (s *InteractionService) CreateInteraction(ctx context.Context, sender, receiver, interactionType, status string, matchID *string, message *string) error {
-	interactionID := uuid.New().String()
 	now := time.Now().Format(time.RFC3339)
 	interaction := models.Interaction{
-		InteractionID:   interactionID,
-		Users:           []string{sender, receiver},
-		UserLookup:      sender, // Used for querying
+		PK:              "USER#" + sender,
+		SK:              "INTERACTION#" + receiver,
 		SenderHandle:    sender,
+		ReceiverHandle:  receiver,
 		InteractionType: interactionType,
-		ChatType:        "private",
 		Status:          status,
 		MatchID:         matchID,
-		Message:         message, // ✅ Store message if provided
+		Message:         message,
 		CreatedAt:       now,
 		LastUpdated:     now,
 	}
@@ -88,8 +87,8 @@ func (s *InteractionService) CreateInteraction(ctx context.Context, sender, rece
 }
 
 // UpdateInteractionStatus updates the status of an existing interaction
-func (s *InteractionService) UpdateInteractionStatus(ctx context.Context, interactionID, newStatus string, matchID *string, message *string) error {
-	log.Printf("🔄 Updating interaction %s to status: %s", interactionID, newStatus)
+func (s *InteractionService) UpdateInteractionStatus(ctx context.Context, sender, receiver, newStatus string, matchID *string, message *string) error {
+	log.Printf("🔄 Updating interaction %s -> %s to status: %s", sender, receiver, newStatus)
 
 	updateExpression := "SET #status = :status, #lastUpdated = :lastUpdated"
 	expressionValues := map[string]types.AttributeValue{
@@ -108,7 +107,7 @@ func (s *InteractionService) UpdateInteractionStatus(ctx context.Context, intera
 		expressionNames["#matchId"] = "matchId"
 	}
 
-	// Add message if provided (only for pings)
+	// Add message if provided
 	if message != nil {
 		updateExpression += ", #message = :message"
 		expressionValues[":message"] = &types.AttributeValueMemberS{Value: *message}
@@ -117,35 +116,30 @@ func (s *InteractionService) UpdateInteractionStatus(ctx context.Context, intera
 
 	// Define key for update
 	key := map[string]types.AttributeValue{
-		"interactionId": &types.AttributeValueMemberS{Value: interactionID},
+		"PK": &types.AttributeValueMemberS{Value: "USER#" + sender},
+		"SK": &types.AttributeValueMemberS{Value: "INTERACTION#" + receiver},
 	}
 
 	_, err := s.Dynamo.UpdateItem(ctx, models.InteractionsTable, updateExpression, key, expressionValues, expressionNames)
 	return err
 }
 
-// GetInteraction fetches an interaction between two users
-func (s *InteractionService) GetInteraction(ctx context.Context, sender, receiver, interactionType string) (*models.Interaction, error) {
-	log.Printf("🔍 Checking if interaction exists: %s -> %s (%s)", sender, receiver, interactionType)
+// GetInteraction retrieves an interaction between two users
+func (s *InteractionService) GetInteraction(ctx context.Context, sender, receiver string) (*models.Interaction, error) {
+	log.Printf("🔍 Checking if interaction exists: %s -> %s", sender, receiver)
 
-	keyCondition := "userLookup = :user"
-	filterExpression := "interactionType = :interactionType"
-	expressionValues := map[string]types.AttributeValue{
-		":user":            &types.AttributeValueMemberS{Value: sender},
-		":interactionType": &types.AttributeValueMemberS{Value: interactionType},
+	key := map[string]types.AttributeValue{
+		"PK": &types.AttributeValueMemberS{Value: "USER#" + sender},
+		"SK": &types.AttributeValueMemberS{Value: "INTERACTION#" + receiver},
 	}
 
-	items, err := s.Dynamo.QueryItemsWithIndex(ctx, models.InteractionsTable, models.UserLookupIndex, keyCondition, expressionValues, map[string]string{"FilterExpression": filterExpression}, 1)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(items) == 0 {
-		return nil, nil // No interaction found
+	item, err := s.Dynamo.GetItem(ctx, models.InteractionsTable, key)
+	if err != nil || item == nil {
+		return nil, nil
 	}
 
 	var interaction models.Interaction
-	err = attributevalue.UnmarshalMap(items[0], &interaction)
+	err = attributevalue.UnmarshalMap(item, &interaction)
 	if err != nil {
 		return nil, err
 	}
@@ -153,80 +147,65 @@ func (s *InteractionService) GetInteraction(ctx context.Context, sender, receive
 	return &interaction, nil
 }
 
-// GenerateMatchID generates a new UUID for matches
-func (s *InteractionService) GenerateMatchID() string {
-	return uuid.New().String()
-}
-
 // GetUserInteractions fetches all interactions involving a specific user
 func (s *InteractionService) GetUserInteractions(ctx context.Context, userHandle string) ([]models.Interaction, error) {
 	log.Printf("🔍 Fetching interactions for user: %s", userHandle)
 
-	keyCondition := "userLookup = :user"
+	keyCondition := "PK = :user"
 	expressionValues := map[string]types.AttributeValue{
-		":user": &types.AttributeValueMemberS{Value: userHandle},
+		":user": &types.AttributeValueMemberS{Value: "USER#" + userHandle},
 	}
 
-	items, err := s.Dynamo.QueryItemsWithIndex(ctx, models.InteractionsTable, models.UserLookupIndex, keyCondition, expressionValues, nil, 100)
-	if err != nil {
-		return nil, err
-	}
-
-	var interactions []models.Interaction
-	err = attributevalue.UnmarshalListOfMaps(items, &interactions)
-	if err != nil {
-		return nil, err
-	}
-
-	return interactions, nil
-}
-
-// ✅ GetInteractedUsers retrieves users who have interacted (liked/disliked)
-func (s *InteractionService) GetInteractedUsers(ctx context.Context, userHandle string, interactionTypes []string) (map[string]bool, error) {
-	log.Printf("🔍 Fetching interactions of types %v for user: %s", interactionTypes, userHandle)
-
-	// 🔹 Step 1: Use `userLookup` for querying instead of `users`
-	keyCondition := "userLookup = :user"
-	expressionAttributeValues := map[string]types.AttributeValue{
-		":user": &types.AttributeValueMemberS{Value: userHandle},
-	}
-
-	// 🔹 Step 2: Query the `users-index` (which now uses `userLookup` as PK)
-	items, err := s.Dynamo.QueryItemsWithIndex(ctx, models.InteractionsTable, models.UserLookupIndex, keyCondition, expressionAttributeValues, nil, 100)
+	// Pass additional parameters: empty map for attribute names and limit (e.g., 100 items)
+	items, err := s.Dynamo.QueryItems(ctx, models.InteractionsTable, keyCondition, expressionValues, nil, 100)
 	if err != nil {
 		log.Printf("❌ Error querying interactions: %v", err)
 		return nil, fmt.Errorf("failed to fetch interactions: %w", err)
 	}
 
-	// 🔹 Step 3: Filter interactions based on interactionTypes
-	interactedUsers := make(map[string]bool)
+	// Unmarshal items into Go struct
+	var interactions []models.Interaction
+	err = attributevalue.UnmarshalListOfMaps(items, &interactions)
+	if err != nil {
+		log.Printf("❌ Error unmarshaling interactions: %v", err)
+		return nil, fmt.Errorf("failed to process data: %w", err)
+	}
+
+	log.Printf("✅ Found %d interactions for %s", len(interactions), userHandle)
+	return interactions, nil
+}
+
+// GetMutualMatches fetches all mutual matches for a user
+func (s *InteractionService) GetMutualMatches(ctx context.Context, userHandle string) ([]string, error) {
+	log.Printf("🔍 Fetching mutual matches for user: %s", userHandle)
+
+	keyCondition := "PK = :user AND #status = :match"
+	expressionValues := map[string]types.AttributeValue{
+		":user":  &types.AttributeValueMemberS{Value: "USER#" + userHandle},
+		":match": &types.AttributeValueMemberS{Value: "match"},
+	}
+	expressionNames := map[string]string{
+		"#status": "status",
+	}
+
+	// Query for matches where user is the sender
+	items, err := s.Dynamo.QueryItemsWithFilters(ctx, models.InteractionsTable, keyCondition, expressionValues, expressionNames)
+	if err != nil {
+		log.Printf("❌ Error fetching mutual matches: %v", err)
+		return nil, fmt.Errorf("failed to fetch matches: %w", err)
+	}
+
+	// Extract matched user handles
+	matches := []string{}
 	for _, item := range items {
 		var interaction models.Interaction
 		err := attributevalue.UnmarshalMap(item, &interaction)
 		if err != nil {
 			continue
 		}
-
-		// 🔹 Only include interactions matching the specified types
-		if contains(interactionTypes, interaction.InteractionType) {
-			for _, user := range interaction.Users {
-				if user != userHandle { // ✅ Store only the other user
-					interactedUsers[user] = true
-				}
-			}
-		}
+		matches = append(matches, interaction.ReceiverHandle)
 	}
 
-	log.Printf("✅ Found %d interacted users for %s", len(interactedUsers), userHandle)
-	return interactedUsers, nil
-}
-
-// ✅ contains checks if a slice contains a specific value
-func contains(slice []string, value string) bool {
-	for _, item := range slice {
-		if item == value {
-			return true
-		}
-	}
-	return false
+	log.Printf("✅ Found %d matches for %s", len(matches), userHandle)
+	return matches, nil
 }

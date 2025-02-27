@@ -256,7 +256,7 @@ func haversine(lat1, lon1, lat2, lon2 float64) float64 {
 	return R * c
 }
 
-// ✅ GetUserSuggestions retrieves a list of users based on gender & interaction history
+// GetUserSuggestions retrieves a list of users based on gender & interaction history
 func (ups *UserProfileService) GetUserSuggestions(ctx context.Context, userHandle, gender string) ([]models.UserProfile, error) {
 	log.Printf("🔍 Fetching user suggestions for gender: %s, excluding interactions from: %s", gender, userHandle)
 
@@ -274,10 +274,16 @@ func (ups *UserProfileService) GetUserSuggestions(ctx context.Context, userHandl
 
 	// Step 2: Fetch interaction history (liked/disliked profiles)
 	interactionService := InteractionService{Dynamo: ups.Dynamo} // Use InteractionService
-	interactedUsers, err := interactionService.GetInteractedUsers(ctx, userHandle, []string{models.InteractionTypeLike, models.InteractionTypeDislike})
+	interactedUsersList, err := interactionService.GetInteractedUsers(ctx, userHandle, []string{models.InteractionTypeLike, models.InteractionTypeDislike})
 	if err != nil {
 		log.Printf("❌ Error fetching interaction history: %v", err)
 		return nil, fmt.Errorf("failed to fetch interactions: %w", err)
+	}
+
+	// Convert interactedUsersList (slice) to a map for quick lookups
+	interactedUsers := make(map[string]bool)
+	for _, user := range interactedUsersList {
+		interactedUsers[user] = true
 	}
 
 	// Step 3: Query the `gender-index` GSI to get potential matches
@@ -348,4 +354,57 @@ func (ups *UserProfileService) GetUserProfileByHandle(ctx context.Context, userH
 	}
 
 	return &profile, nil
+}
+
+// GetInteractedUsers retrieves users who have interacted (liked, pinged, matched) with a specific user.
+func (s *InteractionService) GetInteractedUsers(ctx context.Context, userHandle string, interactionTypes []string) ([]string, error) {
+	log.Printf("🔍 Fetching interacted users for: %s with types: %v", userHandle, interactionTypes)
+
+	// Define query condition to find interactions where the user is the sender
+	keyCondition := "PK = :user"
+	expressionValues := map[string]types.AttributeValue{
+		":user": &types.AttributeValueMemberS{Value: "USER#" + userHandle},
+	}
+
+	// Create a filter expression to include only specified interaction types
+	var filterExpression string
+	for i, interactionType := range interactionTypes {
+		paramName := fmt.Sprintf(":interactionType%d", i)
+		expressionValues[paramName] = &types.AttributeValueMemberS{Value: interactionType}
+
+		if filterExpression == "" {
+			filterExpression = "interactionType = " + paramName
+		} else {
+			filterExpression += " OR interactionType = " + paramName
+		}
+	}
+
+	// Query DynamoDB
+	items, err := s.Dynamo.QueryItemsWithFilters(ctx, models.InteractionsTable, keyCondition, expressionValues, map[string]string{"#interactionType": "interactionType"})
+	if err != nil {
+		log.Printf("❌ Error querying interactions: %v", err)
+		return nil, fmt.Errorf("failed to fetch interacted users: %w", err)
+	}
+
+	// Extract unique interacted user handles
+	interactedUsers := make(map[string]bool)
+	for _, item := range items {
+		var interaction models.Interaction
+		err := attributevalue.UnmarshalMap(item, &interaction)
+		if err != nil {
+			continue
+		}
+
+		// Store the receiver handle (the other user in the interaction)
+		interactedUsers[interaction.ReceiverHandle] = true
+	}
+
+	// Convert map keys to slice
+	userList := make([]string, 0, len(interactedUsers))
+	for user := range interactedUsers {
+		userList = append(userList, user)
+	}
+
+	log.Printf("✅ Found %d interacted users for %s", len(userList), userHandle)
+	return userList, nil
 }

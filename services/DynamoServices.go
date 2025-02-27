@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
@@ -289,9 +290,7 @@ func (ds *DynamoService) QueryItemsWithIndex(
 	expressionAttributeNames map[string]string,
 	limit int32,
 ) ([]map[string]types.AttributeValue, error) {
-
 	log.Printf("🔍 Querying GSI: %s in table: %s", indexName, tableName)
-
 	output, err := ds.Client.Query(ctx, &dynamodb.QueryInput{
 		TableName:                 &tableName,
 		IndexName:                 &indexName, // ✅ Specify GSI name
@@ -304,7 +303,6 @@ func (ds *DynamoService) QueryItemsWithIndex(
 		log.Printf("❌ Error querying GSI: %v", err)
 		return nil, fmt.Errorf("failed to query GSI '%s': %w", indexName, err)
 	}
-
 	log.Printf("✅ Query successful. Retrieved %d items.", len(output.Items))
 	return output.Items, nil
 }
@@ -342,4 +340,42 @@ func (ds *DynamoService) QueryItemsWithOptions(
 
 	log.Printf("✅ Retrieved %d items from table '%s'", len(output.Items), tableName)
 	return output.Items, nil
+}
+
+// QueryItemsWithFilters queries items with both KeyConditionExpression and FilterExpression
+func (s *DynamoService) QueryItemsWithFilters(
+	ctx context.Context,
+	tableName string,
+	keyCondition string,
+	expressionValues map[string]types.AttributeValue,
+	expressionNames map[string]string,
+) ([]map[string]types.AttributeValue, error) {
+
+	// Define the QueryInput
+	input := &dynamodb.QueryInput{
+		TableName:                 aws.String(tableName),
+		KeyConditionExpression:    aws.String(keyCondition),
+		ExpressionAttributeValues: expressionValues,
+	}
+
+	// Add FilterExpression if provided
+	if len(expressionNames) > 0 {
+		input.ExpressionAttributeNames = expressionNames
+		filterExpression := ""
+		for alias, field := range expressionNames {
+			if filterExpression != "" {
+				filterExpression += " AND "
+			}
+			filterExpression += fmt.Sprintf("%s = :%s", alias, field)
+		}
+		input.FilterExpression = aws.String(filterExpression)
+	}
+
+	// Execute query
+	result, err := s.Client.Query(ctx, input)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query items: %w", err)
+	}
+
+	return result.Items, nil
 }
