@@ -56,7 +56,7 @@ func main() {
 	routes.RegisterChatRoutes(r, chatService)
 	routes.RegisterMatchRoutes(r, matchService)
 	routes.RegisterPendingInviteRoutes(r, inviteService) // ✅ Added Invite Routes
-	routes.RegisterInteractionRoutes(r, interactionService)
+	routes.RegisterInteractionsRoutes(r, interactionService)
 	routes.RegisterS3Routes(r)
 
 	r.HandleFunc("/privacy-policy", routes.PrivacyPolicyHandler).Methods("GET")

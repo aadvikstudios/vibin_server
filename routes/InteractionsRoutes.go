@@ -7,14 +7,13 @@ import (
 	"github.com/gorilla/mux"
 )
 
-func RegisterInteractionRoutes(r *mux.Router, interactionService *services.InteractionService) {
-	controller := controllers.NewInteractionController(interactionService)
+// RegisterPendingInviteRoutes registers all invite-related routes under `/api/invites`
+func RegisterInteractionsRoutes(router *mux.Router, interactionService *services.InteractionService) {
+	controller := &controllers.InteractionController{InteractionService: interactionService}
 
-	interactionRouter := r.PathPrefix("/api/interactions").Subrouter()
-	interactionRouter.HandleFunc("/like", controller.HandleLikeUser).Methods("POST")
-	interactionRouter.HandleFunc("/dislike", controller.HandleDislikeUser).Methods("POST")
-	interactionRouter.HandleFunc("/ping", controller.HandlePingUser).Methods("POST")
-	interactionRouter.HandleFunc("/ping/approve", controller.HandleApprovePing).Methods("POST") // ✅ Approve Ping
-	interactionRouter.HandleFunc("/ping/decline", controller.HandleDeclinePing).Methods("POST") // ✅ Decline Ping
-	interactionRouter.HandleFunc("/get", controller.HandleGetInteractions).Methods("POST")
+	interactionRouter := router.PathPrefix("/api/interactions").Subrouter()
+
+	// Interaction Routes
+	interactionRouter.HandleFunc("", controller.CreateInteractionHandler).Methods("POST")
+	interactionRouter.HandleFunc("", controller.GetUserInteractionsHandler).Methods("GET")
 }

@@ -1,17 +1,33 @@
 package models
 
 type Interaction struct {
-	ReceiverHandle string  `dynamodbav:"receiverHandle" json:"receiverHandle"` // ✅ Partition Key (PK)
-	SortKey        string  `dynamodbav:"sk" json:"sk"`                         // ✅ Sort Key (senderHandle#type)
-	SenderHandle   string  `dynamodbav:"senderHandle" json:"senderHandle"`
-	Type           string  `dynamodbav:"type" json:"type"`                           // like, ping, dislike
-	Message        *string `dynamodbav:"message,omitempty" json:"message,omitempty"` // Optional for pings
-	Status         string  `dynamodbav:"status" json:"status"`                       // pending, seen
-	CreatedAt      string  `dynamodbav:"createdAt" json:"createdAt"`
+	InteractionID   string   `dynamodbav:"interactionId" json:"interactionId"`         // ✅ Unique Primary Key
+	Users           []string `dynamodbav:"users" json:"users"`                         // ✅ List of users involved
+	UserLookup      string   `dynamodbav:"userLookup" json:"userLookup"`               // ✅ GSI-Friendly single user attribute
+	SenderHandle    string   `dynamodbav:"senderHandle" json:"senderHandle"`           // ✅ Who initiated the interaction
+	InteractionType string   `dynamodbav:"interactionType" json:"interactionType"`     // ✅ like, ping, invite
+	ChatType        string   `dynamodbav:"chatType" json:"chatType"`                   // ✅ private, group
+	Status          string   `dynamodbav:"status" json:"status"`                       // ✅ pending, match, seen
+	Message         *string  `dynamodbav:"message,omitempty" json:"message,omitempty"` // ✅ Optional, only for pings or invites
+
+	// ✅ Match-related fields
+	MatchID *string `dynamodbav:"matchId,omitempty" json:"matchId,omitempty"` // ✅ Assigned when matched
+	IsGroup bool    `dynamodbav:"isGroup" json:"isGroup"`                     // ✅ Differentiates group vs private chats
+
+	// ✅ Timestamps and tracking
+	CreatedAt   string  `dynamodbav:"createdAt" json:"createdAt"`                     // ✅ Timestamp of creation
+	LastUpdated string  `dynamodbav:"lastUpdated" json:"lastUpdated"`                 // ✅ Updated whenever status changes
+	ExpiresAt   *string `dynamodbav:"expiresAt,omitempty" json:"expiresAt,omitempty"` // ✅ TTL for auto-expiry
 }
 
 // ✅ Define table name for interactions
 const InteractionsTable = "Interactions"
 
-// ✅ Define GSI for querying by senderHandle
+// ✅ Define GSI for querying interactions by user
+const UsersIndex = "users-index"
+
+// ✅ Define GSI for querying interactions by sender
 const SenderHandleIndex = "senderHandle-index"
+
+// ✅ Define GSI for querying interactions by match ID
+const MatchIndex = "matchId-index"
