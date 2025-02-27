@@ -128,13 +128,14 @@ func (s *InteractionService) UpdateInteractionStatus(ctx context.Context, intera
 func (s *InteractionService) GetInteraction(ctx context.Context, sender, receiver, interactionType string) (*models.Interaction, error) {
 	log.Printf("🔍 Checking if interaction exists: %s -> %s (%s)", sender, receiver, interactionType)
 
-	keyCondition := "userLookup = :user AND interactionType = :interactionType"
+	keyCondition := "userLookup = :user"
+	filterExpression := "interactionType = :interactionType"
 	expressionValues := map[string]types.AttributeValue{
 		":user":            &types.AttributeValueMemberS{Value: sender},
 		":interactionType": &types.AttributeValueMemberS{Value: interactionType},
 	}
 
-	items, err := s.Dynamo.QueryItemsWithIndex(ctx, models.InteractionsTable, models.UserLookupIndex, keyCondition, expressionValues, nil, 1)
+	items, err := s.Dynamo.QueryItemsWithIndex(ctx, models.InteractionsTable, models.UserLookupIndex, keyCondition, expressionValues, map[string]string{"FilterExpression": filterExpression}, 1)
 	if err != nil {
 		return nil, err
 	}
