@@ -3,8 +3,9 @@ package models
 type Interaction struct {
 	InteractionID   string   `dynamodbav:"interactionId" json:"interactionId"`         // ✅ Unique Primary Key
 	Users           []string `dynamodbav:"users" json:"users"`                         // ✅ List of users involved
-	UserLookup      string   `dynamodbav:"userLookup" json:"userLookup"`               // ✅ GSI-Friendly single user attribute
+	UserLookup      string   `dynamodbav:"userLookup" json:"userLookup"`               // ✅ GSI-Friendly single user attribute (For GSI)
 	SenderHandle    string   `dynamodbav:"senderHandle" json:"senderHandle"`           // ✅ Who initiated the interaction
+	ReceiverHandle  string   `dynamodbav:"receiverHandle" json:"receiverHandle"`       // ✅ Target user (NEW FIELD)
 	InteractionType string   `dynamodbav:"interactionType" json:"interactionType"`     // ✅ like, ping, invite
 	ChatType        string   `dynamodbav:"chatType" json:"chatType"`                   // ✅ private, group
 	Status          string   `dynamodbav:"status" json:"status"`                       // ✅ pending, match, seen
@@ -23,11 +24,11 @@ type Interaction struct {
 // ✅ Define table name for interactions
 const InteractionsTable = "Interactions"
 
-// ✅ Define GSI for querying interactions by user
-const UsersIndex = "users-index"
+// ✅ Define GSI for querying interactions by user (NEW PARTITION KEY)
+const UsersIndex = "users-index" // PK: userLookup
 
 // ✅ Define GSI for querying interactions by sender
-const SenderHandleIndex = "senderHandle-index"
+const SenderHandleIndex = "senderHandle-index" // PK: senderHandle
 
 // ✅ Define GSI for querying interactions by match ID
-const MatchIndex = "matchId-index"
+const MatchIndex = "matchId-index" // PK: matchId

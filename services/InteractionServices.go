@@ -180,24 +180,24 @@ func (s *InteractionService) GetUserInteractions(ctx context.Context, userHandle
 	return interactions, nil
 }
 
-// ✅ GetInteractedUsers retrieves a map of users who match the given interaction types
+// ✅ GetInteractedUsers retrieves users who match the given interaction types
 func (s *InteractionService) GetInteractedUsers(ctx context.Context, userHandle string, interactionTypes []string) (map[string]bool, error) {
 	log.Printf("🔍 Fetching interactions of types %v for user: %s", interactionTypes, userHandle)
 
-	// Step 1: Build KeyConditionExpression for user lookup
+	// ✅ Query using userLookup instead of users (Fix for GSI)
 	keyCondition := "userLookup = :user"
 	expressionAttributeValues := map[string]types.AttributeValue{
 		":user": &types.AttributeValueMemberS{Value: userHandle},
 	}
 
-	// Step 2: Query interactions table with GSI
+	// ✅ Fetch interactions from DynamoDB using correct GSI
 	items, err := s.Dynamo.QueryItemsWithIndex(ctx, models.InteractionsTable, models.UsersIndex, keyCondition, expressionAttributeValues, nil, 100)
 	if err != nil {
 		log.Printf("❌ Error querying interactions: %v", err)
 		return nil, fmt.Errorf("failed to fetch interactions: %w", err)
 	}
 
-	// Step 3: Filter interactions by provided interactionTypes
+	// ✅ Filter interactions by interactionTypes
 	interactedUsers := make(map[string]bool)
 	for _, item := range items {
 		var interaction models.Interaction
@@ -206,7 +206,7 @@ func (s *InteractionService) GetInteractedUsers(ctx context.Context, userHandle 
 			continue
 		}
 
-		// Check if interaction type matches any in the provided list
+		// ✅ Only store users with relevant interaction types
 		if contains(interactionTypes, interaction.InteractionType) {
 			for _, user := range interaction.Users {
 				if user != userHandle { // ✅ Store only the other user
