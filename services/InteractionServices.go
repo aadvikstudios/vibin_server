@@ -231,21 +231,20 @@ func (s *InteractionService) GetMutualMatches(ctx context.Context, userHandle st
 	return matches, nil
 }
 
-// GetInteractedUsers retrieves users who have interacted (liked, pinged, matched) with a specific user
 func (s *InteractionService) GetInteractedUsers(ctx context.Context, userHandle string, interactionTypes []string) ([]string, error) {
 	log.Printf("🔍 Fetching interacted users for: %s with types: %v", userHandle, interactionTypes)
 
-	// ✅ Use GSI from models package
+	// ✅ Use the correct GSI name (Check if `interactionType-index` exists)
 	indexName := models.InteractionTypeIndex
 
-	// ✅ Query where `PK = USER#userHandle` (DynamoDB requires equality here)
-	keyCondition := "#PK = :user"
+	// ✅ KeyCondition must include the partition key (PK)
+	keyCondition := "#PK = :userHandle"
 	expressionValues := map[string]types.AttributeValue{
-		":user": &types.AttributeValueMemberS{Value: "USER#" + userHandle},
+		":userHandle": &types.AttributeValueMemberS{Value: "USER#" + userHandle},
 	}
 	expressionNames := map[string]string{"#PK": "PK"}
 
-	// ✅ Apply FilterExpression for `interactionType` filtering
+	// ✅ Apply FilterExpression for multiple interaction types
 	var filterExpressions []string
 	for i, interactionType := range interactionTypes {
 		paramName := fmt.Sprintf(":interactionType%d", i)
@@ -254,10 +253,9 @@ func (s *InteractionService) GetInteractedUsers(ctx context.Context, userHandle 
 	}
 	expressionNames["#interactionType"] = "interactionType"
 
-	// ✅ Use FilterExpression instead of OR in KeyConditionExpression
 	filterExpression := strings.Join(filterExpressions, " OR ")
 
-	// ✅ Use `QueryItemsWithIndex` for efficient querying
+	// ✅ Use the fixed `QueryItemsWithIndexWithFilters`
 	items, err := s.Dynamo.QueryItemsWithIndexWithFilters(ctx, models.InteractionsTable, indexName, keyCondition, expressionValues, expressionNames, filterExpression, 100)
 	if err != nil {
 		log.Printf("❌ Error querying interacted users: %v", err)
