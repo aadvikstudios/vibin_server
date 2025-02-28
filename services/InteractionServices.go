@@ -57,6 +57,7 @@ func (s *InteractionService) GetInteraction(ctx context.Context, sender, receive
 
 func (s *InteractionService) CreateOrUpdateInteraction(
 	ctx context.Context, sender, receiver, interactionType, action string, message *string) (bool, error) {
+
 	log.Printf("🔄 Processing %s from %s -> %s", interactionType, sender, receiver)
 
 	// Check if an existing interaction exists
@@ -68,23 +69,26 @@ func (s *InteractionService) CreateOrUpdateInteraction(
 
 	var newStatus string
 	var matchID *string
+	isMatch := false // Default value
 
 	switch action {
 	case "like":
 		newStatus = "pending"
 
 		// ✅ Check if it's a mutual match
-		isMatch, err := s.CheckMutualMatch(ctx, sender, receiver)
+		isMatch, err = s.CheckMutualMatch(ctx, sender, receiver)
+		log.Printf("⚠️ isMatch fetching interaction: %t", isMatch)
+
 		if err != nil {
 			return false, err
 		}
 
-		// ✅ If mutual match, handle it
+		// ✅ If mutual match, update status
 		if isMatch {
 			newStatus = "match"
 			matchID, err = s.HandleMutualMatch(ctx, sender, receiver)
 			if err != nil {
-				return isMatch, err
+				return false, err
 			}
 		}
 
@@ -94,6 +98,7 @@ func (s *InteractionService) CreateOrUpdateInteraction(
 		newStatus = "pending"
 	case "approve":
 		newStatus = "match"
+		isMatch = true // Approving a request results in a match
 		generatedMatchID := uuid.New().String()
 		matchID = &generatedMatchID
 	case "reject":
@@ -111,12 +116,18 @@ func (s *InteractionService) CreateOrUpdateInteraction(
 			return false, err
 		}
 		log.Println("✅ New interaction successfully created.")
-		return false, nil
+		return isMatch, nil
 	}
 
 	// 🔥 Otherwise, update existing interaction
-	return false, s.UpdateInteractionStatus(ctx, sender, receiver, newStatus, matchID, message)
+	err = s.UpdateInteractionStatus(ctx, sender, receiver, newStatus, matchID, message)
+	if err != nil {
+		return false, err
+	}
+
+	return isMatch, nil // ✅ Correctly return `isMatch` when applicable
 }
+
 func (s *InteractionService) HandlePingApproval(ctx context.Context, sender, receiver string) error {
 	log.Printf("✅ Handling Ping Approval: %s -> %s", sender, receiver)
 
