@@ -56,7 +56,7 @@ func (s *InteractionService) GetInteraction(ctx context.Context, sender, receive
 }
 
 func (s *InteractionService) CreateOrUpdateInteraction(
-	ctx context.Context, sender, receiver, interactionType, action string, message *string) (bool, error) {
+	ctx context.Context, sender, receiver, interactionType, action string, message *string) (bool, *models.MatchedUserDetails, error) {
 
 	log.Printf("🔄 Processing %s from %s -> %s", interactionType, sender, receiver)
 
@@ -64,12 +64,13 @@ func (s *InteractionService) CreateOrUpdateInteraction(
 	existingInteraction, err := s.GetInteraction(ctx, sender, receiver)
 	if err != nil {
 		log.Printf("⚠️ Error fetching interaction: %v", err)
-		return false, err
+		return false, nil, err
 	}
 
 	var newStatus string
 	var matchID *string
 	isMatch := false // Default value
+	var matchedUser *models.MatchedUserDetails
 
 	switch action {
 	case "like":
@@ -80,7 +81,7 @@ func (s *InteractionService) CreateOrUpdateInteraction(
 		log.Printf("⚠️ isMatch fetching interaction: %t", isMatch)
 
 		if err != nil {
-			return false, err
+			return false, nil, err
 		}
 
 		// ✅ If mutual match, update status
@@ -88,7 +89,25 @@ func (s *InteractionService) CreateOrUpdateInteraction(
 			newStatus = "match"
 			matchID, err = s.HandleMutualMatch(ctx, sender, receiver)
 			if err != nil {
-				return false, err
+				return false, nil, err
+			}
+			// ✅ Fetch receiver's profile
+			profile, err := s.UserProfileService.GetUserProfileByHandle(ctx, receiver)
+			if err != nil {
+				log.Printf("⚠️ Failed to fetch user profile for %s: %v", receiver, err)
+			} else {
+				// ✅ Create MatchedUserDetails struct
+				photo := ""
+				if len(profile.Photos) > 0 {
+					photo = profile.Photos[0]
+				}
+
+				matchedUser = &models.MatchedUserDetails{
+					Name:       profile.Name,
+					UserHandle: receiver,
+					Photo:      photo,
+					MatchID:    *matchID,
+				}
 			}
 		}
 
@@ -104,7 +123,7 @@ func (s *InteractionService) CreateOrUpdateInteraction(
 	case "reject":
 		newStatus = "rejected"
 	default:
-		return false, fmt.Errorf("❌ Unsupported interaction type: %s", interactionType)
+		return false, nil, fmt.Errorf("❌ Unsupported interaction type: %s", interactionType)
 	}
 
 	// 🔥 If the interaction does not exist, create it
@@ -113,19 +132,19 @@ func (s *InteractionService) CreateOrUpdateInteraction(
 		err := s.CreateInteraction(ctx, sender, receiver, interactionType, newStatus, matchID, message)
 		if err != nil {
 			log.Printf("❌ Failed to create interaction: %v", err)
-			return false, err
+			return false, nil, err
 		}
 		log.Println("✅ New interaction successfully created.")
-		return isMatch, nil
+		return isMatch, nil, nil
 	}
 
 	// 🔥 Otherwise, update existing interaction
 	err = s.UpdateInteractionStatus(ctx, sender, receiver, newStatus, matchID, message)
 	if err != nil {
-		return false, err
+		return false, nil, err
 	}
 
-	return isMatch, nil // ✅ Correctly return `isMatch` when applicable
+	return isMatch, matchedUser, nil
 }
 
 func (s *InteractionService) HandlePingApproval(ctx context.Context, sender, receiver string) error {

@@ -21,3 +21,11 @@ type InteractionWithProfile struct {
 	Interests       []string `json:"interests,omitempty"`
 	DistanceBetween float64  `json:"distanceBetween,omitempty"` // Computed distance (not stored in DB)
 }
+
+// MatchedUserDetails represents the necessary data for a matched user
+type MatchedUserDetails struct {
+	Name       string `json:"name"`
+	UserHandle string `json:"userHandle"`
+	Photo      string `json:"photo"`
+	MatchID    string `json:"matchId"`
+}
