@@ -56,14 +56,14 @@ func (s *InteractionService) GetInteraction(ctx context.Context, sender, receive
 }
 
 func (s *InteractionService) CreateOrUpdateInteraction(
-	ctx context.Context, sender, receiver, interactionType, action string, message *string) error {
+	ctx context.Context, sender, receiver, interactionType, action string, message *string) (bool, error) {
 	log.Printf("🔄 Processing %s from %s -> %s", interactionType, sender, receiver)
 
 	// Check if an existing interaction exists
 	existingInteraction, err := s.GetInteraction(ctx, sender, receiver)
 	if err != nil {
 		log.Printf("⚠️ Error fetching interaction: %v", err)
-		return err
+		return false, err
 	}
 
 	var newStatus string
@@ -76,7 +76,7 @@ func (s *InteractionService) CreateOrUpdateInteraction(
 		// ✅ Check if it's a mutual match
 		isMatch, err := s.CheckMutualMatch(ctx, sender, receiver)
 		if err != nil {
-			return err
+			return false, err
 		}
 
 		// ✅ If mutual match, handle it
@@ -84,7 +84,7 @@ func (s *InteractionService) CreateOrUpdateInteraction(
 			newStatus = "match"
 			matchID, err = s.HandleMutualMatch(ctx, sender, receiver)
 			if err != nil {
-				return err
+				return isMatch, err
 			}
 		}
 
@@ -99,7 +99,7 @@ func (s *InteractionService) CreateOrUpdateInteraction(
 	case "reject":
 		newStatus = "rejected"
 	default:
-		return fmt.Errorf("❌ Unsupported interaction type: %s", interactionType)
+		return false, fmt.Errorf("❌ Unsupported interaction type: %s", interactionType)
 	}
 
 	// 🔥 If the interaction does not exist, create it
@@ -108,14 +108,14 @@ func (s *InteractionService) CreateOrUpdateInteraction(
 		err := s.CreateInteraction(ctx, sender, receiver, interactionType, newStatus, matchID, message)
 		if err != nil {
 			log.Printf("❌ Failed to create interaction: %v", err)
-			return err
+			return false, err
 		}
 		log.Println("✅ New interaction successfully created.")
-		return nil
+		return false, nil
 	}
 
 	// 🔥 Otherwise, update existing interaction
-	return s.UpdateInteractionStatus(ctx, sender, receiver, newStatus, matchID, message)
+	return false, s.UpdateInteractionStatus(ctx, sender, receiver, newStatus, matchID, message)
 }
 func (s *InteractionService) HandlePingApproval(ctx context.Context, sender, receiver string) error {
 	log.Printf("✅ Handling Ping Approval: %s -> %s", sender, receiver)

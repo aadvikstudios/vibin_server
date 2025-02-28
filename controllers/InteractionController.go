@@ -47,7 +47,7 @@ func (c *InteractionController) CreateInteractionHandler(w http.ResponseWriter, 
 	defer cancel()
 
 	// Process interaction dynamically
-	err := c.InteractionService.CreateOrUpdateInteraction(
+	isMatch, err := c.InteractionService.CreateOrUpdateInteraction(
 		ctx,
 		request.SenderHandle,
 		request.ReceiverHandle,
@@ -62,7 +62,10 @@ func (c *InteractionController) CreateInteractionHandler(w http.ResponseWriter, 
 	}
 
 	// Send success response
-	response := map[string]string{"message": "Interaction processed successfully"}
+	response := map[string]interface{}{
+		"message": "Interaction processed successfully",
+		"isMatch": isMatch,
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
