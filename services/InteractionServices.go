@@ -16,8 +16,9 @@ import (
 
 // InteractionService handles interactions (like, ping, and matches)
 type InteractionService struct {
-	Dynamo      *DynamoService
-	ChatService *ChatService
+	Dynamo             *DynamoService
+	UserProfileService *UserProfileService
+	ChatService        *ChatService
 }
 
 // GetInteraction retrieves an interaction between two users
@@ -328,33 +329,31 @@ func (s *InteractionService) UpdateInteractionStatus(ctx context.Context, sender
 	log.Println("✅ Interaction status successfully updated.")
 	return nil
 }
-func (s *InteractionService) GetMutualMatches(ctx context.Context, userHandle string) ([]string, error) {
+func (s *InteractionService) GetMutualMatches(ctx context.Context, userHandle string) ([]models.InteractionWithProfile, error) {
 	log.Printf("🔍 Fetching mutual matches for user: %s", userHandle)
 
-	// ✅ Use the correct index with `PK = USER#userHandle` and `SK = status`
 	indexName := models.StatusIndex
 	keyCondition := "#PK = :user AND #status = :matchStatus"
 
-	// ✅ Ensure `PK` includes "USER#"
 	expressionValues := map[string]types.AttributeValue{
-		":user":        &types.AttributeValueMemberS{Value: "USER#" + userHandle}, // ✅ Correct PK format
+		":user":        &types.AttributeValueMemberS{Value: "USER#" + userHandle},
 		":matchStatus": &types.AttributeValueMemberS{Value: "match"},
 	}
 
 	expressionNames := map[string]string{
-		"#PK":     "PK", // ✅ Match the GSI PK (which now follows table PK format)
+		"#PK":     "PK",
 		"#status": "status",
 	}
 
-	// ✅ Query using the optimized index
+	// Query for interactions
 	items, err := s.Dynamo.QueryItemsWithIndex(ctx, models.InteractionsTable, indexName, keyCondition, expressionValues, expressionNames, 100)
 	if err != nil {
 		log.Printf("❌ Error fetching mutual matches: %v", err)
 		return nil, fmt.Errorf("failed to fetch matches: %w", err)
 	}
 
-	// ✅ Extract matched user handles
-	matches := []string{}
+	var matchesWithProfiles []models.InteractionWithProfile
+
 	for _, item := range items {
 		var interaction models.Interaction
 		err := attributevalue.UnmarshalMap(item, &interaction)
@@ -363,16 +362,36 @@ func (s *InteractionService) GetMutualMatches(ctx context.Context, userHandle st
 			continue
 		}
 
-		// ✅ Ensure the receiverHandle is valid before appending
-		if interaction.ReceiverHandle != "" {
-			matches = append(matches, interaction.ReceiverHandle)
-		} else {
-			log.Printf("⚠️ Skipping item with empty receiverHandle: %+v", interaction)
+		// Fetch user profile (extracting only needed fields)
+		profile, err := s.UserProfileService.GetUserProfileByHandle(ctx, interaction.ReceiverHandle)
+		if err != nil {
+			log.Printf("⚠️ Failed to fetch profile for %s: %v", interaction.ReceiverHandle, err)
+			continue
 		}
+
+		// Append only selected fields
+		matchesWithProfiles = append(matchesWithProfiles, models.InteractionWithProfile{
+			ReceiverHandle: interaction.ReceiverHandle,
+			SenderHandle:   interaction.SenderHandle,
+			Type:           interaction.InteractionType,
+			Message:        *interaction.Message,
+			Status:         interaction.Status,
+			CreatedAt:      interaction.CreatedAt,
+
+			// Extracted profile fields
+			Name:        profile.Name,
+			Age:         profile.Age,
+			Gender:      profile.Gender,
+			Orientation: profile.Orientation,
+			LookingFor:  profile.LookingFor,
+			Photos:      profile.Photos,
+			Bio:         profile.Bio,
+			Interests:   profile.Interests,
+		})
 	}
 
-	log.Printf("✅ Found %d mutual matches for %s", len(matches), userHandle)
-	return matches, nil
+	log.Printf("✅ Found %d mutual matches for %s", len(matchesWithProfiles), userHandle)
+	return matchesWithProfiles, nil
 }
 
 func (s *InteractionService) GetInteractedUsers(ctx context.Context, userHandle string, interactionTypes []string) ([]string, error) {
@@ -448,8 +467,7 @@ func (s *InteractionService) GetInteractedUsers(ctx context.Context, userHandle 
 	return users, nil
 }
 
-// ✅ Fetch interactions sent by the user
-func (s *InteractionService) GetUserInteractions(ctx context.Context, userHandle string) ([]models.Interaction, error) {
+func (s *InteractionService) GetUserInteractions(ctx context.Context, userHandle string) ([]models.InteractionWithProfile, error) {
 	log.Printf("🔍 Fetching interactions SENT by user: %s", userHandle)
 
 	keyCondition := "PK = :user"
@@ -463,43 +481,107 @@ func (s *InteractionService) GetUserInteractions(ctx context.Context, userHandle
 		return nil, fmt.Errorf("failed to fetch interactions: %w", err)
 	}
 
-	var interactions []models.Interaction
-	err = attributevalue.UnmarshalListOfMaps(items, &interactions)
-	if err != nil {
-		log.Printf("❌ Error unmarshaling interactions: %v", err)
-		return nil, fmt.Errorf("failed to process data: %w", err)
+	var interactionsWithProfiles []models.InteractionWithProfile
+
+	for _, item := range items {
+		var interaction models.Interaction
+		err := attributevalue.UnmarshalMap(item, &interaction)
+		if err != nil {
+			log.Printf("⚠️ Skipping item due to unmarshalling error: %v", err)
+			continue
+		}
+
+		// Fetch user profile for receiver
+		profile, err := s.UserProfileService.GetUserProfileByHandle(ctx, interaction.ReceiverHandle)
+		if err != nil {
+			log.Printf("⚠️ Failed to fetch profile for %s: %v", interaction.ReceiverHandle, err)
+			continue
+		}
+
+		// Append only selected fields
+		interactionsWithProfiles = append(interactionsWithProfiles, models.InteractionWithProfile{
+			ReceiverHandle: interaction.ReceiverHandle,
+			SenderHandle:   interaction.SenderHandle,
+			Type:           interaction.InteractionType,
+			Message:        *interaction.Message,
+			Status:         interaction.Status,
+			CreatedAt:      interaction.CreatedAt,
+
+			// Extracted profile fields
+			Name:        profile.Name,
+			Age:         profile.Age,
+			Gender:      profile.Gender,
+			Orientation: profile.Orientation,
+			LookingFor:  profile.LookingFor,
+			Photos:      profile.Photos,
+			Bio:         profile.Bio,
+			Interests:   profile.Interests,
+		})
 	}
 
-	log.Printf("✅ Found %d interactions sent by %s", len(interactions), userHandle)
-	return interactions, nil
+	log.Printf("✅ Found %d interactions sent by %s", len(interactionsWithProfiles), userHandle)
+	return interactionsWithProfiles, nil
 }
 
-// GetReceivedInteractions fetches all interactions where the user is the receiver
-func (s *InteractionService) GetReceivedInteractions(ctx context.Context, userHandle string) ([]models.Interaction, error) {
+func (s *InteractionService) GetReceivedInteractions(ctx context.Context, userHandle string) ([]models.InteractionWithProfile, error) {
 	log.Printf("🔍 Fetching interactions RECEIVED by user: %s", userHandle)
 
-	// Use the new GSI (Global Secondary Index) for `receiverHandle`
-	indexName := models.ReceiverHandleIndex // ✅ Ensure this index exists in DynamoDB
+	indexName := models.ReceiverHandleIndex
 	keyCondition := "#receiverHandle = :receiver"
+
 	expressionValues := map[string]types.AttributeValue{
 		":receiver": &types.AttributeValueMemberS{Value: userHandle},
 	}
 	expressionNames := map[string]string{"#receiverHandle": "receiverHandle"}
 
-	// ✅ Use the new QueryItemsWithIndex helper
 	items, err := s.Dynamo.QueryItemsWithIndex(ctx, models.InteractionsTable, indexName, keyCondition, expressionValues, expressionNames, 100)
 	if err != nil {
 		log.Printf("❌ Error querying received interactions: %v", err)
 		return nil, fmt.Errorf("failed to fetch received interactions: %w", err)
 	}
 
-	var interactions []models.Interaction
-	err = attributevalue.UnmarshalListOfMaps(items, &interactions)
-	if err != nil {
-		log.Printf("❌ Error unmarshaling received interactions: %v", err)
-		return nil, fmt.Errorf("failed to process received interactions: %w", err)
+	var interactionsWithProfiles []models.InteractionWithProfile
+
+	for _, item := range items {
+		var interaction models.Interaction
+		err := attributevalue.UnmarshalMap(item, &interaction)
+		if err != nil {
+			log.Printf("⚠️ Skipping item due to unmarshalling error: %v", err)
+			continue
+		}
+
+		// Fetch sender's profile
+		profile, err := s.UserProfileService.GetUserProfileByHandle(ctx, interaction.SenderHandle)
+		if err != nil {
+			log.Printf("⚠️ Failed to fetch profile for %s: %v", interaction.SenderHandle, err)
+			continue
+		}
+
+		interactionsWithProfiles = append(interactionsWithProfiles, models.InteractionWithProfile{
+			ReceiverHandle: interaction.ReceiverHandle,
+			SenderHandle:   interaction.SenderHandle,
+			Type:           interaction.InteractionType,
+			Message: func() string {
+				if interaction.Message != nil {
+					return *interaction.Message
+				}
+				return ""
+			}(),
+			Status:    interaction.Status,
+			CreatedAt: interaction.CreatedAt,
+
+			// Extracted profile fields
+			Name:        profile.Name,
+			Age:         profile.Age,
+			Gender:      profile.Gender,
+			Orientation: profile.Orientation,
+			LookingFor:  profile.LookingFor,
+			Photos:      profile.Photos,
+			Bio:         profile.Bio,
+			Interests:   profile.Interests,
+		})
 	}
 
-	log.Printf("✅ Found %d interactions received by %s", len(interactions), userHandle)
-	return interactions, nil
+	log.Printf("✅ Found %d received interactions for %s", len(interactionsWithProfiles), userHandle)
+	return interactionsWithProfiles, nil
 }

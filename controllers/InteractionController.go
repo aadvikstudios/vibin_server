@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"vibin_server/models"
 	"vibin_server/services"
 )
 
@@ -145,7 +146,7 @@ func (c *InteractionController) GetMutualMatchesHandler(w http.ResponseWriter, r
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Fetch mutual matches
+	// Fetch mutual matches (with minimal profile data)
 	matches, err := c.InteractionService.GetMutualMatches(ctx, userHandle)
 	if err != nil {
 		log.Printf("❌ Failed to fetch mutual matches for %s: %v", userHandle, err)
@@ -155,10 +156,13 @@ func (c *InteractionController) GetMutualMatchesHandler(w http.ResponseWriter, r
 
 	// Convert to JSON and send response
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(matches)
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(struct {
+		Matches []models.InteractionWithProfile `json:"matches"`
+	}{matches})
 }
 
-// ✅ Fetch interactions sent by the user (initiated by them)
+// GetSentInteractionsHandler fetches all sent interactions for a user
 func (c *InteractionController) GetSentInteractionsHandler(w http.ResponseWriter, r *http.Request) {
 	userHandle := r.URL.Query().Get("userHandle")
 
@@ -171,7 +175,7 @@ func (c *InteractionController) GetSentInteractionsHandler(w http.ResponseWriter
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Fetch sent interactions
+	// Fetch sent interactions with user profile data
 	interactions, err := c.InteractionService.GetUserInteractions(ctx, userHandle)
 	if err != nil {
 		log.Printf("❌ Failed to fetch sent interactions for %s: %v", userHandle, err)
@@ -181,10 +185,13 @@ func (c *InteractionController) GetSentInteractionsHandler(w http.ResponseWriter
 
 	// Convert to JSON and send response
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(interactions)
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(struct {
+		Interactions []models.InteractionWithProfile `json:"interactions"`
+	}{interactions})
 }
 
-// ✅ Fetch interactions received by the user (where they are the receiver)
+// GetReceivedInteractionsHandler fetches all received interactions for a user
 func (c *InteractionController) GetReceivedInteractionsHandler(w http.ResponseWriter, r *http.Request) {
 	userHandle := r.URL.Query().Get("userHandle")
 
@@ -197,7 +204,7 @@ func (c *InteractionController) GetReceivedInteractionsHandler(w http.ResponseWr
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Fetch received interactions
+	// Fetch received interactions with user profile data
 	interactions, err := c.InteractionService.GetReceivedInteractions(ctx, userHandle)
 	if err != nil {
 		log.Printf("❌ Failed to fetch received interactions for %s: %v", userHandle, err)
@@ -207,5 +214,8 @@ func (c *InteractionController) GetReceivedInteractionsHandler(w http.ResponseWr
 
 	// Convert to JSON and send response
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(interactions)
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(struct {
+		Interactions []models.InteractionWithProfile `json:"interactions"`
+	}{interactions})
 }
