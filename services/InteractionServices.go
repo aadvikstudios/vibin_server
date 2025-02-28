@@ -91,12 +91,14 @@ func (s *InteractionService) CreateOrUpdateInteraction(
 			if err != nil {
 				return false, nil, err
 			}
+
 			// ✅ Fetch receiver's profile
 			profile, err := s.UserProfileService.GetUserProfileByHandle(ctx, receiver)
 			if err != nil {
 				log.Printf("⚠️ Failed to fetch user profile for %s: %v", receiver, err)
 			} else {
-				// ✅ Create MatchedUserDetails struct
+				log.Printf("✅ Fetched profile for %s: Name=%s, Photos=%v", receiver, profile.Name, profile.Photos)
+
 				photo := ""
 				if len(profile.Photos) > 0 {
 					photo = profile.Photos[0]
@@ -108,6 +110,7 @@ func (s *InteractionService) CreateOrUpdateInteraction(
 					Photo:      photo,
 					MatchID:    *matchID,
 				}
+				log.Printf("✅ MatchedUserDetails created: %+v", matchedUser)
 			}
 		}
 
@@ -117,16 +120,36 @@ func (s *InteractionService) CreateOrUpdateInteraction(
 		newStatus = "pending"
 	case "approve":
 		newStatus = "match"
-		isMatch = true // Approving a request results in a match
+		isMatch = true
 		generatedMatchID := uuid.New().String()
 		matchID = &generatedMatchID
+
+		// ✅ Fetch receiver's profile
+		profile, err := s.UserProfileService.GetUserProfileByHandle(ctx, receiver)
+		if err != nil {
+			log.Printf("⚠️ Failed to fetch user profile for %s: %v", receiver, err)
+		} else {
+			log.Printf("✅ Fetched profile for %s: Name=%s, Photos=%v", receiver, profile.Name, profile.Photos)
+
+			photo := ""
+			if len(profile.Photos) > 0 {
+				photo = profile.Photos[0]
+			}
+
+			matchedUser = &models.MatchedUserDetails{
+				Name:       profile.Name,
+				UserHandle: receiver,
+				Photo:      photo,
+				MatchID:    *matchID,
+			}
+		}
 	case "reject":
 		newStatus = "rejected"
 	default:
 		return false, nil, fmt.Errorf("❌ Unsupported interaction type: %s", interactionType)
 	}
 
-	// 🔥 If the interaction does not exist, create it
+	// ✅ If the interaction does not exist, create it
 	if existingInteraction == nil {
 		log.Printf("🆕 No existing interaction found. Creating a new interaction for %s -> %s", sender, receiver)
 		err := s.CreateInteraction(ctx, sender, receiver, interactionType, newStatus, matchID, message)
@@ -135,10 +158,10 @@ func (s *InteractionService) CreateOrUpdateInteraction(
 			return false, nil, err
 		}
 		log.Println("✅ New interaction successfully created.")
-		return isMatch, nil, nil
+		return isMatch, matchedUser, nil
 	}
 
-	// 🔥 Otherwise, update existing interaction
+	// ✅ Otherwise, update existing interaction
 	err = s.UpdateInteractionStatus(ctx, sender, receiver, newStatus, matchID, message)
 	if err != nil {
 		return false, nil, err
