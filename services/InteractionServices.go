@@ -74,9 +74,20 @@ func (s *InteractionService) CreateOrUpdateInteraction(ctx context.Context, send
 		// Check if User B also liked User A (Mutual Match)
 		mutualLike, _ := s.GetInteraction(ctx, receiver, sender)
 		if mutualLike != nil && mutualLike.Status == "pending" {
+			// It's a mutual like, so mark as a match
 			newStatus = "match"
 			generatedMatchID := uuid.New().String()
 			matchID = &generatedMatchID
+
+			// Update both interactions to "match" status
+			log.Printf("🔥 Mutual Match Found! Updating both interactions: %s <-> %s", sender, receiver)
+
+			// Update UserA -> UserB interaction to "match"
+			err := s.UpdateInteractionStatus(ctx, receiver, sender, "match", matchID, nil)
+			if err != nil {
+				log.Printf("❌ Failed to update mutual match for %s -> %s: %v", receiver, sender, err)
+				return err
+			}
 		}
 	case "dislike":
 		newStatus = "declined"
