@@ -234,17 +234,17 @@ func (s *InteractionService) GetMutualMatches(ctx context.Context, userHandle st
 func (s *InteractionService) GetInteractedUsers(ctx context.Context, userHandle string, interactionTypes []string) ([]string, error) {
 	log.Printf("🔍 Fetching interacted users for: %s with types: %v", userHandle, interactionTypes)
 
-	// ✅ Use the correct GSI name (Check if `interactionType-index` exists)
+	// ✅ Use the correct GSI (Ensure 'interactionType-index' exists)
 	indexName := models.InteractionTypeIndex
 
-	// ✅ KeyCondition must include the partition key (PK)
+	// ✅ Define KeyConditionExpression (Must include PK)
 	keyCondition := "#PK = :userHandle"
 	expressionValues := map[string]types.AttributeValue{
 		":userHandle": &types.AttributeValueMemberS{Value: "USER#" + userHandle},
 	}
-	expressionNames := map[string]string{"#PK": "PK"}
+	expressionNames := map[string]string{"#PK": "PK"} // ✅ Required Partition Key
 
-	// ✅ Apply FilterExpression for multiple interaction types
+	// ✅ Construct FilterExpression for multiple interaction types
 	var filterExpressions []string
 	for i, interactionType := range interactionTypes {
 		paramName := fmt.Sprintf(":interactionType%d", i)
@@ -253,26 +253,42 @@ func (s *InteractionService) GetInteractedUsers(ctx context.Context, userHandle 
 	}
 	expressionNames["#interactionType"] = "interactionType"
 
+	// ✅ Combine FilterExpression
 	filterExpression := strings.Join(filterExpressions, " OR ")
 
-	// ✅ Use the fixed `QueryItemsWithIndexWithFilters`
+	// ✅ Debugging: Print Query Structure
+	log.Printf("🔧 DynamoDB Query Structure:\n")
+	log.Printf("📌 Table: %s, Index: %s", models.InteractionsTable, indexName)
+	log.Printf("📌 KeyCondition: %s", keyCondition)
+	log.Printf("📌 ExpressionValues: %+v", expressionValues)
+	log.Printf("📌 ExpressionNames: %+v", expressionNames)
+	log.Printf("📌 FilterExpression: %s", filterExpression)
+
+	// ✅ Query with GSI and Filters
 	items, err := s.Dynamo.QueryItemsWithIndexWithFilters(ctx, models.InteractionsTable, indexName, keyCondition, expressionValues, expressionNames, filterExpression, 100)
 	if err != nil {
 		log.Printf("❌ Error querying interacted users: %v", err)
 		return nil, fmt.Errorf("failed to fetch interacted users: %w", err)
 	}
 
+	// ✅ Debugging: Print number of retrieved items
+	log.Printf("📥 Retrieved %d items from DynamoDB", len(items))
+
 	// ✅ Extract interacted user handles
 	users := []string{}
 	for _, item := range items {
 		var interaction models.Interaction
 		err := attributevalue.UnmarshalMap(item, &interaction)
-		if err == nil {
-			users = append(users, interaction.ReceiverHandle)
+		if err != nil {
+			log.Printf("⚠️ Error unmarshalling interaction: %v", err)
+			continue
 		}
+		users = append(users, interaction.ReceiverHandle)
 	}
 
-	log.Printf("✅ Found %d interacted users for %s", len(users), userHandle)
+	// ✅ Debugging: Print final user list
+	log.Printf("✅ Found %d interacted users for %s: %+v", len(users), userHandle, users)
+
 	return users, nil
 }
 
