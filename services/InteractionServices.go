@@ -382,7 +382,7 @@ func (s *InteractionService) UpdateInteractionStatus(ctx context.Context, sender
 	log.Println("✅ Interaction status successfully updated.")
 	return nil
 }
-func (s *InteractionService) GetMutualMatches(ctx context.Context, userHandle string) ([]models.InteractionWithProfile, error) {
+func (s *InteractionService) GetMutualMatches(ctx context.Context, userHandle string) ([]models.MatchedUserDetails, error) {
 	log.Printf("🔍 Fetching mutual matches for user: %s", userHandle)
 
 	// Define the Global Secondary Index (GSI) for querying matches
@@ -415,10 +415,10 @@ func (s *InteractionService) GetMutualMatches(ctx context.Context, userHandle st
 	// If no matches found, return an empty slice instead of nil
 	if len(items) == 0 {
 		log.Printf("⚠️ No mutual matches found for user: %s", userHandle)
-		return []models.InteractionWithProfile{}, nil
+		return []models.MatchedUserDetails{}, nil
 	}
 
-	var matchesWithProfiles []models.InteractionWithProfile
+	var matchesWithProfiles []models.MatchedUserDetails
 
 	// Process each interaction record
 	for _, item := range items {
@@ -427,12 +427,6 @@ func (s *InteractionService) GetMutualMatches(ctx context.Context, userHandle st
 		if err != nil {
 			log.Printf("⚠️ Skipping item due to unmarshalling error: %v", err)
 			continue
-		}
-
-		// ✅ Prevent nil pointer dereference for `interaction.Message`
-		message := ""
-		if interaction.Message != nil {
-			message = *interaction.Message
 		}
 
 		// Determine which handle to fetch profile for
@@ -449,39 +443,19 @@ func (s *InteractionService) GetMutualMatches(ctx context.Context, userHandle st
 			continue // Skip this match if profile lookup fails
 		}
 
-		// ✅ Ensure interests and photos are safely unmarshalled
-		var interests []string
-		if profile.Interests != nil {
-			interests = profile.Interests
-		} else {
-			interests = []string{}
-		}
-
-		var photos []string
+		photo := ""
 		if profile.Photos != nil && len(profile.Photos) > 0 {
-			photos = profile.Photos
-		} else {
-			photos = []string{"https://via.placeholder.com/100"} // Default photo
+			photo = profile.Photos[0]
 		}
 
 		// ✅ Append to results with only relevant fields
-		matchesWithProfiles = append(matchesWithProfiles, models.InteractionWithProfile{
-			ReceiverHandle:  interaction.ReceiverHandle,
-			SenderHandle:    interaction.SenderHandle,
-			InteractionType: interaction.InteractionType,
-			Message:         message, // ✅ Safe from nil dereference
-			Status:          interaction.Status,
-			CreatedAt:       interaction.CreatedAt,
-			MatchID:         *interaction.MatchID,
+		matchesWithProfiles = append(matchesWithProfiles, models.MatchedUserDetails{
+
 			// Extracted profile fields
-			Name:        profile.Name,
-			Age:         profile.Age,
-			Gender:      profile.Gender,
-			Orientation: profile.Orientation,
-			LookingFor:  profile.LookingFor,
-			Photos:      photos, // ✅ Safe array handling
-			Bio:         profile.Bio,
-			Interests:   interests, // ✅ Safe array handling
+			Name:       profile.Name,
+			UserHandle: profile.UserHandle,
+			MatchID:    *interaction.MatchID,
+			Photo:      photo, // ✅ Safe array handling
 		})
 	}
 
