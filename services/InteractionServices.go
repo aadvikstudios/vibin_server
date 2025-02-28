@@ -133,8 +133,8 @@ func (s *InteractionService) HandlePingApproval(ctx context.Context, sender, rec
 		log.Printf("⚠️ Failed to update reverse ping status: %v", err)
 	}
 
-	// ✅ Send an initial message
-	err = s.CreateInitialMessage(ctx, sender, receiver, matchID)
+	// ✅ Send an initial message (with original ping content)
+	err = s.CreateInitialMessage(ctx, sender, receiver, matchID, true)
 	if err != nil {
 		log.Printf("⚠️ Failed to send initial message: %v", err)
 	}
@@ -142,6 +142,7 @@ func (s *InteractionService) HandlePingApproval(ctx context.Context, sender, rec
 	log.Printf("✅ Ping Approved: %s <-> %s", sender, receiver)
 	return nil
 }
+
 func (s *InteractionService) HandlePingDecline(ctx context.Context, sender, receiver string) error {
 	log.Printf("🚫 Handling Ping Decline: %s -> %s", sender, receiver)
 
@@ -194,8 +195,8 @@ func (s *InteractionService) HandleMutualMatch(ctx context.Context, sender, rece
 		return nil, err
 	}
 
-	// ✅ Create an initial message
-	err = s.CreateInitialMessage(ctx, sender, receiver, matchID)
+	// ✅ Create an initial message (default congratulatory message)
+	err = s.CreateInitialMessage(ctx, sender, receiver, matchID, false)
 	if err != nil {
 		log.Printf("⚠️ Failed to send initial message for match %s: %v", matchID, err)
 	}
@@ -203,15 +204,41 @@ func (s *InteractionService) HandleMutualMatch(ctx context.Context, sender, rece
 	return &matchID, nil
 }
 
-func (s *InteractionService) CreateInitialMessage(ctx context.Context, sender, receiver, matchID string) error {
+func (s *InteractionService) CreateInitialMessage(ctx context.Context, sender, receiver, matchID string, isPing bool) error {
 	log.Printf("💬 Creating initial message for matchId: %s between %s & %s", matchID, sender, receiver)
+
+	// Determine message content and sender
+	var content string
+	var originalSender string
+
+	if isPing {
+		// ✅ Fetch the original ping interaction to get the message content
+		originalInteraction, err := s.GetInteraction(ctx, sender, receiver)
+		if err != nil {
+			log.Printf("❌ Failed to fetch original ping interaction: %v", err)
+			return err
+		}
+
+		if originalInteraction == nil || originalInteraction.Message == nil {
+			log.Printf("⚠️ No original ping message found, using default content")
+			content = "Hey! I sent you a ping. Let's connect! 😊"
+		} else {
+			content = *originalInteraction.Message // ✅ Use original ping message
+		}
+
+		originalSender = sender // ✅ Keep the original sender
+	} else {
+		// ✅ Default message for mutual like
+		content = "Congratulations! You both liked each other. Say hello! 👋"
+		originalSender = sender
+	}
 
 	// ✅ Define the first message
 	initialMessage := models.Message{
 		MatchID:   matchID,
 		MessageID: uuid.New().String(),
-		SenderID:  sender,
-		Content:   "Congratulations! You both liked each other. Say hello! 👋",
+		SenderID:  originalSender, // ✅ Keep the original sender
+		Content:   content,
 		CreatedAt: time.Now().Format(time.RFC3339), // Store timestamp
 		Liked:     false,                           // Default to false
 	}
