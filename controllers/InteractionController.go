@@ -66,6 +66,70 @@ func (c *InteractionController) CreateInteractionHandler(w http.ResponseWriter, 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
 }
+func (c *InteractionController) ApprovePingHandler(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		SenderHandle   string `json:"senderHandle"`
+		ReceiverHandle string `json:"receiverHandle"`
+	}
+
+	// Decode request body
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		log.Println("❌ Invalid approve ping request:", err)
+		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("✅ Approving ping from %s -> %s", request.SenderHandle, request.ReceiverHandle)
+
+	// Process approval in InteractionService
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err := c.InteractionService.HandlePingApproval(ctx, request.SenderHandle, request.ReceiverHandle)
+	if err != nil {
+		log.Printf("❌ Failed to approve ping: %v", err)
+		http.Error(w, "Failed to approve ping: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Send success response
+	response := map[string]string{"message": "Ping approved successfully"}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
+}
+func (c *InteractionController) DeclinePingHandler(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		SenderHandle   string `json:"senderHandle"`
+		ReceiverHandle string `json:"receiverHandle"`
+	}
+
+	// Decode request body
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		log.Println("❌ Invalid decline ping request:", err)
+		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("🚫 Declining ping from %s -> %s", request.SenderHandle, request.ReceiverHandle)
+
+	// Process decline in InteractionService
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err := c.InteractionService.HandlePingDecline(ctx, request.SenderHandle, request.ReceiverHandle)
+	if err != nil {
+		log.Printf("❌ Failed to decline ping: %v", err)
+		http.Error(w, "Failed to decline ping: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Send success response
+	response := map[string]string{"message": "Ping declined successfully"}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
+}
 
 // GetMutualMatchesHandler fetches all mutual matches for a user
 func (c *InteractionController) GetMutualMatchesHandler(w http.ResponseWriter, r *http.Request) {

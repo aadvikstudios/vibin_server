@@ -116,6 +116,51 @@ func (s *InteractionService) CreateOrUpdateInteraction(
 	// 🔥 Otherwise, update existing interaction
 	return s.UpdateInteractionStatus(ctx, sender, receiver, newStatus, matchID, message)
 }
+func (s *InteractionService) HandlePingApproval(ctx context.Context, sender, receiver string) error {
+	log.Printf("✅ Handling Ping Approval: %s -> %s", sender, receiver)
+
+	// ✅ Update status to "match"
+	matchID := uuid.New().String()
+	err := s.UpdateInteractionStatus(ctx, sender, receiver, "match", &matchID, nil)
+	if err != nil {
+		log.Printf("❌ Failed to approve ping: %v", err)
+		return err
+	}
+
+	// ✅ Also update reverse interaction (Receiver -> Sender)
+	err = s.UpdateInteractionStatus(ctx, receiver, sender, "match", &matchID, nil)
+	if err != nil {
+		log.Printf("⚠️ Failed to update reverse ping status: %v", err)
+	}
+
+	// ✅ Send an initial message
+	err = s.CreateInitialMessage(ctx, sender, receiver, matchID)
+	if err != nil {
+		log.Printf("⚠️ Failed to send initial message: %v", err)
+	}
+
+	log.Printf("✅ Ping Approved: %s <-> %s", sender, receiver)
+	return nil
+}
+func (s *InteractionService) HandlePingDecline(ctx context.Context, sender, receiver string) error {
+	log.Printf("🚫 Handling Ping Decline: %s -> %s", sender, receiver)
+
+	// ✅ Update status to "declined"
+	err := s.UpdateInteractionStatus(ctx, sender, receiver, "declined", nil, nil)
+	if err != nil {
+		log.Printf("❌ Failed to decline ping: %v", err)
+		return err
+	}
+
+	// ✅ Also update reverse interaction (Receiver -> Sender)
+	err = s.UpdateInteractionStatus(ctx, receiver, sender, "declined", nil, nil)
+	if err != nil {
+		log.Printf("⚠️ Failed to update reverse ping status: %v", err)
+	}
+
+	log.Printf("✅ Ping Declined: %s -> %s", sender, receiver)
+	return nil
+}
 
 func (s *InteractionService) CheckMutualMatch(ctx context.Context, sender, receiver string) (bool, error) {
 	log.Printf("🔍 Checking for mutual match: %s <-> %s", sender, receiver)
