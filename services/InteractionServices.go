@@ -371,12 +371,12 @@ func (s *InteractionService) GetMutualMatches(ctx context.Context, userHandle st
 
 		// Append only selected fields
 		matchesWithProfiles = append(matchesWithProfiles, models.InteractionWithProfile{
-			ReceiverHandle: interaction.ReceiverHandle,
-			SenderHandle:   interaction.SenderHandle,
-			Type:           interaction.InteractionType,
-			Message:        *interaction.Message,
-			Status:         interaction.Status,
-			CreatedAt:      interaction.CreatedAt,
+			ReceiverHandle:  interaction.ReceiverHandle,
+			SenderHandle:    interaction.SenderHandle,
+			InteractionType: interaction.InteractionType,
+			Message:         *interaction.Message,
+			Status:          interaction.Status,
+			CreatedAt:       interaction.CreatedAt,
 
 			// Extracted profile fields
 			Name:        profile.Name,
@@ -500,12 +500,12 @@ func (s *InteractionService) GetUserInteractions(ctx context.Context, userHandle
 
 		// Append only selected fields
 		interactionsWithProfiles = append(interactionsWithProfiles, models.InteractionWithProfile{
-			ReceiverHandle: interaction.ReceiverHandle,
-			SenderHandle:   interaction.SenderHandle,
-			Type:           interaction.InteractionType,
-			Message:        *interaction.Message,
-			Status:         interaction.Status,
-			CreatedAt:      interaction.CreatedAt,
+			ReceiverHandle:  interaction.ReceiverHandle,
+			SenderHandle:    interaction.SenderHandle,
+			InteractionType: interaction.InteractionType,
+			Message:         *interaction.Message,
+			Status:          interaction.Status,
+			CreatedAt:       interaction.CreatedAt,
 
 			// Extracted profile fields
 			Name:        profile.Name,
@@ -558,9 +558,9 @@ func (s *InteractionService) GetReceivedInteractions(ctx context.Context, userHa
 		}
 
 		interactionsWithProfiles = append(interactionsWithProfiles, models.InteractionWithProfile{
-			ReceiverHandle: interaction.ReceiverHandle,
-			SenderHandle:   interaction.SenderHandle,
-			Type:           interaction.InteractionType,
+			ReceiverHandle:  interaction.ReceiverHandle,
+			SenderHandle:    interaction.SenderHandle,
+			InteractionType: interaction.InteractionType,
 			Message: func() string {
 				if interaction.Message != nil {
 					return *interaction.Message
