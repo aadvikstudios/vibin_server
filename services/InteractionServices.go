@@ -117,7 +117,12 @@ func (s *InteractionService) CreateOrUpdateInteraction(ctx context.Context, send
 	// 🔥 If the interaction does not exist, create it
 	if existingInteraction == nil {
 		log.Printf("🆕 Interaction does not exist. Creating new interaction...")
-		return s.CreateInteraction(ctx, sender, receiver, interactionType, newStatus, matchID, message)
+		err := s.CreateInteraction(ctx, sender, receiver, interactionType, newStatus, matchID, message)
+		if err != nil {
+			log.Printf("❌ Failed to create interaction: %v", err)
+			return err
+		}
+		return nil // Ensure function exits successfully
 	}
 
 	// 🔥 Otherwise, update existing interaction
