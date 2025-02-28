@@ -231,34 +231,34 @@ func (s *InteractionService) GetMutualMatches(ctx context.Context, userHandle st
 	return matches, nil
 }
 
-// ✅ GetInteractedUsers using GSI instead of Scan
+// GetInteractedUsers retrieves users who have interacted (liked, pinged, matched) with a specific user
 func (s *InteractionService) GetInteractedUsers(ctx context.Context, userHandle string, interactionTypes []string) ([]string, error) {
 	log.Printf("🔍 Fetching interacted users for: %s with types: %v", userHandle, interactionTypes)
 
 	// ✅ Use GSI from models package
 	indexName := models.InteractionTypeIndex
 
-	// ✅ Query where `interactionType IN (...)` and `PK = USER#userHandle`
+	// ✅ Query where `PK = USER#userHandle` (DynamoDB requires equality here)
 	keyCondition := "#PK = :user"
 	expressionValues := map[string]types.AttributeValue{
 		":user": &types.AttributeValueMemberS{Value: "USER#" + userHandle},
 	}
 	expressionNames := map[string]string{"#PK": "PK"}
 
-	// ✅ Filter multiple interaction types
-	if len(interactionTypes) > 0 {
-		var filterExpressions []string
-		for i, interactionType := range interactionTypes {
-			paramName := fmt.Sprintf(":interactionType%d", i)
-			expressionValues[paramName] = &types.AttributeValueMemberS{Value: interactionType}
-			filterExpressions = append(filterExpressions, fmt.Sprintf("#interactionType = %s", paramName))
-		}
-		expressionNames["#interactionType"] = "interactionType"
-		keyCondition += " AND (" + strings.Join(filterExpressions, " OR ") + ")"
+	// ✅ Apply FilterExpression for `interactionType` filtering
+	var filterExpressions []string
+	for i, interactionType := range interactionTypes {
+		paramName := fmt.Sprintf(":interactionType%d", i)
+		expressionValues[paramName] = &types.AttributeValueMemberS{Value: interactionType}
+		filterExpressions = append(filterExpressions, fmt.Sprintf("#interactionType = %s", paramName))
 	}
+	expressionNames["#interactionType"] = "interactionType"
+
+	// ✅ Use FilterExpression instead of OR in KeyConditionExpression
+	filterExpression := strings.Join(filterExpressions, " OR ")
 
 	// ✅ Use `QueryItemsWithIndex` for efficient querying
-	items, err := s.Dynamo.QueryItemsWithIndex(ctx, models.InteractionsTable, indexName, keyCondition, expressionValues, expressionNames, 100)
+	items, err := s.Dynamo.QueryItemsWithIndexWithFilters(ctx, models.InteractionsTable, indexName, keyCondition, expressionValues, expressionNames, filterExpression, 100)
 	if err != nil {
 		log.Printf("❌ Error querying interacted users: %v", err)
 		return nil, fmt.Errorf("failed to fetch interacted users: %w", err)
