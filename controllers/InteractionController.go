@@ -68,31 +68,31 @@ func (c *InteractionController) CreateInteractionHandler(w http.ResponseWriter, 
 }
 
 // GetUserInteractionsHandler fetches all interactions for a specific user
-func (c *InteractionController) GetUserInteractionsHandler(w http.ResponseWriter, r *http.Request) {
-	userHandle := r.URL.Query().Get("userHandle")
+// func (c *InteractionController) GetUserInteractionsHandler(w http.ResponseWriter, r *http.Request) {
+// 	userHandle := r.URL.Query().Get("userHandle")
 
-	// Validate input
-	if userHandle == "" {
-		http.Error(w, "Missing userHandle parameter", http.StatusBadRequest)
-		return
-	}
+// 	// Validate input
+// 	if userHandle == "" {
+// 		http.Error(w, "Missing userHandle parameter", http.StatusBadRequest)
+// 		return
+// 	}
 
-	// Set a timeout for database operations
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+// 	// Set a timeout for database operations
+// 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+// 	defer cancel()
 
-	// Fetch interactions
-	interactions, err := c.InteractionService.GetUserInteractions(ctx, userHandle)
-	if err != nil {
-		log.Printf("❌ Failed to fetch interactions for %s: %v", userHandle, err)
-		http.Error(w, "Failed to fetch interactions: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
+// 	// Fetch interactions
+// 	interactions, err := c.InteractionService.GetUserInteractions(ctx, userHandle)
+// 	if err != nil {
+// 		log.Printf("❌ Failed to fetch interactions for %s: %v", userHandle, err)
+// 		http.Error(w, "Failed to fetch interactions: "+err.Error(), http.StatusInternalServerError)
+// 		return
+// 	}
 
-	// Convert to JSON and send response
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(interactions)
-}
+// 	// Convert to JSON and send response
+// 	w.Header().Set("Content-Type", "application/json")
+// 	json.NewEncoder(w).Encode(interactions)
+// }
 
 // GetMutualMatchesHandler fetches all mutual matches for a user
 func (c *InteractionController) GetMutualMatchesHandler(w http.ResponseWriter, r *http.Request) {
@@ -119,4 +119,56 @@ func (c *InteractionController) GetMutualMatchesHandler(w http.ResponseWriter, r
 	// Convert to JSON and send response
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(matches)
+}
+
+// ✅ Fetch interactions sent by the user (initiated by them)
+func (c *InteractionController) GetSentInteractionsHandler(w http.ResponseWriter, r *http.Request) {
+	userHandle := r.URL.Query().Get("userHandle")
+
+	// Validate input
+	if userHandle == "" {
+		http.Error(w, "Missing userHandle parameter", http.StatusBadRequest)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Fetch sent interactions
+	interactions, err := c.InteractionService.GetUserInteractions(ctx, userHandle)
+	if err != nil {
+		log.Printf("❌ Failed to fetch sent interactions for %s: %v", userHandle, err)
+		http.Error(w, "Failed to fetch interactions: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Convert to JSON and send response
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(interactions)
+}
+
+// ✅ Fetch interactions received by the user (where they are the receiver)
+func (c *InteractionController) GetReceivedInteractionsHandler(w http.ResponseWriter, r *http.Request) {
+	userHandle := r.URL.Query().Get("userHandle")
+
+	// Validate input
+	if userHandle == "" {
+		http.Error(w, "Missing userHandle parameter", http.StatusBadRequest)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Fetch received interactions
+	interactions, err := c.InteractionService.GetReceivedInteractions(ctx, userHandle)
+	if err != nil {
+		log.Printf("❌ Failed to fetch received interactions for %s: %v", userHandle, err)
+		http.Error(w, "Failed to fetch interactions: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Convert to JSON and send response
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(interactions)
 }

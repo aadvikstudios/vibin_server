@@ -18,3 +18,7 @@ const InteractionsTable = "Interactions"
 
 // ✅ Define GSI for querying interactions where the user is the receiver
 const ReceiverHandleIndex = "receiverHandle-index" // PK: receiverHandle
+
+const StatusIndex = "status-index"
+
+const InteractionTypeIndex = "interactionType-index"

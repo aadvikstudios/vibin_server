@@ -7,7 +7,6 @@ import (
 	"log"
 	"os"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
@@ -280,33 +279,6 @@ func (ds *DynamoService) BatchWriteItems(
 	return nil
 }
 
-// QueryItemsWithIndex queries items from DynamoDB using a Global Secondary Index (GSI)
-func (ds *DynamoService) QueryItemsWithIndex(
-	ctx context.Context,
-	tableName string,
-	indexName string,
-	keyConditionExpression string,
-	expressionAttributeValues map[string]types.AttributeValue,
-	expressionAttributeNames map[string]string,
-	limit int32,
-) ([]map[string]types.AttributeValue, error) {
-	log.Printf("🔍 Querying GSI: %s in table: %s", indexName, tableName)
-	output, err := ds.Client.Query(ctx, &dynamodb.QueryInput{
-		TableName:                 &tableName,
-		IndexName:                 &indexName, // ✅ Specify GSI name
-		KeyConditionExpression:    &keyConditionExpression,
-		ExpressionAttributeValues: expressionAttributeValues,
-		ExpressionAttributeNames:  expressionAttributeNames,
-		Limit:                     &limit,
-	})
-	if err != nil {
-		log.Printf("❌ Error querying GSI: %v", err)
-		return nil, fmt.Errorf("failed to query GSI '%s': %w", indexName, err)
-	}
-	log.Printf("✅ Query successful. Retrieved %d items.", len(output.Items))
-	return output.Items, nil
-}
-
 // QueryItemsWithOptions queries DynamoDB with sorting and limit options
 func (ds *DynamoService) QueryItemsWithOptions(
 	ctx context.Context,
@@ -342,38 +314,29 @@ func (ds *DynamoService) QueryItemsWithOptions(
 	return output.Items, nil
 }
 
-// QueryItemsWithFilters queries items with both KeyConditionExpression and FilterExpression
-func (s *DynamoService) QueryItemsWithFilters(
+// QueryItemsWithIndex queries items from DynamoDB using a Global Secondary Index (GSI)
+func (ds *DynamoService) QueryItemsWithIndex(
 	ctx context.Context,
 	tableName string,
-	keyCondition string,
-	expressionValues map[string]types.AttributeValue,
-	expressionNames map[string]string,
-	filterExpression string, // ✅ Added filterExpression as a parameter
+	indexName string,
+	keyConditionExpression string,
+	expressionAttributeValues map[string]types.AttributeValue,
+	expressionAttributeNames map[string]string,
+	limit int32,
 ) ([]map[string]types.AttributeValue, error) {
-
-	// Define the QueryInput
-	input := &dynamodb.QueryInput{
-		TableName:                 aws.String(tableName),
-		KeyConditionExpression:    aws.String(keyCondition),
-		ExpressionAttributeValues: expressionValues,
-	}
-
-	// Add ExpressionAttributeNames if provided
-	if len(expressionNames) > 0 {
-		input.ExpressionAttributeNames = expressionNames
-	}
-
-	// ✅ Use filterExpression only if provided
-	if filterExpression != "" {
-		input.FilterExpression = aws.String(filterExpression)
-	}
-
-	// Execute query
-	result, err := s.Client.Query(ctx, input)
+	log.Printf("🔍 Querying GSI: %s in table: %s", indexName, tableName)
+	output, err := ds.Client.Query(ctx, &dynamodb.QueryInput{
+		TableName:                 &tableName,
+		IndexName:                 &indexName, // ✅ Specify GSI name
+		KeyConditionExpression:    &keyConditionExpression,
+		ExpressionAttributeValues: expressionAttributeValues,
+		ExpressionAttributeNames:  expressionAttributeNames,
+		Limit:                     &limit,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to query items: %w", err)
+		log.Printf("❌ Error querying GSI: %v", err)
+		return nil, fmt.Errorf("failed to query GSI '%s': %w", indexName, err)
 	}
-
-	return result.Items, nil
+	log.Printf("✅ Query successful. Retrieved %d items.", len(output.Items))
+	return output.Items, nil
 }

@@ -191,9 +191,96 @@ func (s *InteractionService) UpdateInteractionStatus(ctx context.Context, sender
 	return nil
 }
 
-// GetUserInteractions fetches all interactions involving a specific user
+// ✅ GetMutualMatches using GSI instead of scan
+func (s *InteractionService) GetMutualMatches(ctx context.Context, userHandle string) ([]string, error) {
+	log.Printf("🔍 Fetching mutual matches for user: %s", userHandle)
+
+	// ✅ Use GSI from models package
+	indexName := models.StatusIndex
+
+	// ✅ Query where `status = match` and `PK = USER#userHandle`
+	keyCondition := "#PK = :user"
+	expressionValues := map[string]types.AttributeValue{
+		":user":  &types.AttributeValueMemberS{Value: "USER#" + userHandle},
+		":match": &types.AttributeValueMemberS{Value: "match"},
+	}
+	expressionNames := map[string]string{
+		"#PK":     "PK",     // ✅ User handle as partition key
+		"#status": "status", // ✅ Filter only matched interactions
+	}
+
+	// ✅ Use `QueryItemsWithIndex` for efficient querying
+	items, err := s.Dynamo.QueryItemsWithIndex(ctx, models.InteractionsTable, indexName, keyCondition, expressionValues, expressionNames, 100)
+	if err != nil {
+		log.Printf("❌ Error fetching mutual matches: %v", err)
+		return nil, fmt.Errorf("failed to fetch matches: %w", err)
+	}
+
+	// ✅ Extract matched user handles
+	matches := []string{}
+	for _, item := range items {
+		var interaction models.Interaction
+		err := attributevalue.UnmarshalMap(item, &interaction)
+		if err != nil {
+			continue
+		}
+		matches = append(matches, interaction.ReceiverHandle)
+	}
+
+	log.Printf("✅ Found %d matches for %s", len(matches), userHandle)
+	return matches, nil
+}
+
+// ✅ GetInteractedUsers using GSI instead of Scan
+func (s *InteractionService) GetInteractedUsers(ctx context.Context, userHandle string, interactionTypes []string) ([]string, error) {
+	log.Printf("🔍 Fetching interacted users for: %s with types: %v", userHandle, interactionTypes)
+
+	// ✅ Use GSI from models package
+	indexName := models.InteractionTypeIndex
+
+	// ✅ Query where `interactionType IN (...)` and `PK = USER#userHandle`
+	keyCondition := "#PK = :user"
+	expressionValues := map[string]types.AttributeValue{
+		":user": &types.AttributeValueMemberS{Value: "USER#" + userHandle},
+	}
+	expressionNames := map[string]string{"#PK": "PK"}
+
+	// ✅ Filter multiple interaction types
+	if len(interactionTypes) > 0 {
+		var filterExpressions []string
+		for i, interactionType := range interactionTypes {
+			paramName := fmt.Sprintf(":interactionType%d", i)
+			expressionValues[paramName] = &types.AttributeValueMemberS{Value: interactionType}
+			filterExpressions = append(filterExpressions, fmt.Sprintf("#interactionType = %s", paramName))
+		}
+		expressionNames["#interactionType"] = "interactionType"
+		keyCondition += " AND (" + strings.Join(filterExpressions, " OR ") + ")"
+	}
+
+	// ✅ Use `QueryItemsWithIndex` for efficient querying
+	items, err := s.Dynamo.QueryItemsWithIndex(ctx, models.InteractionsTable, indexName, keyCondition, expressionValues, expressionNames, 100)
+	if err != nil {
+		log.Printf("❌ Error querying interacted users: %v", err)
+		return nil, fmt.Errorf("failed to fetch interacted users: %w", err)
+	}
+
+	// ✅ Extract interacted user handles
+	users := []string{}
+	for _, item := range items {
+		var interaction models.Interaction
+		err := attributevalue.UnmarshalMap(item, &interaction)
+		if err == nil {
+			users = append(users, interaction.ReceiverHandle)
+		}
+	}
+
+	log.Printf("✅ Found %d interacted users for %s", len(users), userHandle)
+	return users, nil
+}
+
+// ✅ Fetch interactions sent by the user
 func (s *InteractionService) GetUserInteractions(ctx context.Context, userHandle string) ([]models.Interaction, error) {
-	log.Printf("🔍 Fetching interactions for user: %s", userHandle)
+	log.Printf("🔍 Fetching interactions SENT by user: %s", userHandle)
 
 	keyCondition := "PK = :user"
 	expressionValues := map[string]types.AttributeValue{
@@ -213,79 +300,36 @@ func (s *InteractionService) GetUserInteractions(ctx context.Context, userHandle
 		return nil, fmt.Errorf("failed to process data: %w", err)
 	}
 
-	log.Printf("✅ Found %d interactions for %s", len(interactions), userHandle)
+	log.Printf("✅ Found %d interactions sent by %s", len(interactions), userHandle)
 	return interactions, nil
 }
 
-// GetMutualMatches fetches all mutual matches for a user
-func (s *InteractionService) GetMutualMatches(ctx context.Context, userHandle string) ([]string, error) {
-	log.Printf("🔍 Fetching mutual matches for user: %s", userHandle)
+// GetReceivedInteractions fetches all interactions where the user is the receiver
+func (s *InteractionService) GetReceivedInteractions(ctx context.Context, userHandle string) ([]models.Interaction, error) {
+	log.Printf("🔍 Fetching interactions RECEIVED by user: %s", userHandle)
 
-	keyCondition := "PK = :user"
+	// Use the new GSI (Global Secondary Index) for `receiverHandle`
+	indexName := models.ReceiverHandleIndex // ✅ Ensure this index exists in DynamoDB
+	keyCondition := "#receiverHandle = :receiver"
 	expressionValues := map[string]types.AttributeValue{
-		":user": &types.AttributeValueMemberS{Value: "USER#" + userHandle},
+		":receiver": &types.AttributeValueMemberS{Value: userHandle},
 	}
+	expressionNames := map[string]string{"#receiverHandle": "receiverHandle"}
 
-	filterExpression := "#status = :match"
-	expressionValues[":match"] = &types.AttributeValueMemberS{Value: "match"}
-	expressionNames := map[string]string{"#status": "status"}
-
-	items, err := s.Dynamo.QueryItemsWithFilters(ctx, models.InteractionsTable, keyCondition, expressionValues, expressionNames, filterExpression)
+	// ✅ Use the new QueryItemsWithIndex helper
+	items, err := s.Dynamo.QueryItemsWithIndex(ctx, models.InteractionsTable, indexName, keyCondition, expressionValues, expressionNames, 100)
 	if err != nil {
-		log.Printf("❌ Error fetching mutual matches: %v", err)
-		return nil, fmt.Errorf("failed to fetch matches: %w", err)
+		log.Printf("❌ Error querying received interactions: %v", err)
+		return nil, fmt.Errorf("failed to fetch received interactions: %w", err)
 	}
 
-	// Extract matched user handles
-	matches := []string{}
-	for _, item := range items {
-		var interaction models.Interaction
-		err := attributevalue.UnmarshalMap(item, &interaction)
-		if err != nil {
-			continue
-		}
-		matches = append(matches, interaction.ReceiverHandle)
-	}
-
-	log.Printf("✅ Found %d matches for %s", len(matches), userHandle)
-	return matches, nil
-}
-
-// GetInteractedUsers retrieves users who have interacted (liked, pinged, matched) with a specific user
-func (s *InteractionService) GetInteractedUsers(ctx context.Context, userHandle string, interactionTypes []string) ([]string, error) {
-	log.Printf("🔍 Fetching interacted users for: %s with types: %v", userHandle, interactionTypes)
-
-	keyCondition := "PK = :user"
-	expressionValues := map[string]types.AttributeValue{
-		":user": &types.AttributeValueMemberS{Value: "USER#" + userHandle},
-	}
-
-	var filterExpressions []string
-	expressionNames := map[string]string{"#interactionType": "interactionType"}
-
-	for i, interactionType := range interactionTypes {
-		paramName := fmt.Sprintf(":interactionType%d", i)
-		expressionValues[paramName] = &types.AttributeValueMemberS{Value: interactionType}
-		filterExpressions = append(filterExpressions, fmt.Sprintf("#interactionType = %s", paramName))
-	}
-
-	filterExpression := strings.Join(filterExpressions, " OR ")
-
-	items, err := s.Dynamo.QueryItemsWithFilters(ctx, models.InteractionsTable, keyCondition, expressionValues, expressionNames, filterExpression)
+	var interactions []models.Interaction
+	err = attributevalue.UnmarshalListOfMaps(items, &interactions)
 	if err != nil {
-		log.Printf("❌ Error querying interactions: %v", err)
-		return nil, fmt.Errorf("failed to fetch interacted users: %w", err)
+		log.Printf("❌ Error unmarshaling received interactions: %v", err)
+		return nil, fmt.Errorf("failed to process received interactions: %w", err)
 	}
 
-	var users []string
-	for _, item := range items {
-		var interaction models.Interaction
-		err := attributevalue.UnmarshalMap(item, &interaction)
-		if err == nil {
-			users = append(users, interaction.ReceiverHandle)
-		}
-	}
-
-	log.Printf("✅ Found %d interacted users for %s", len(users), userHandle)
-	return users, nil
+	log.Printf("✅ Found %d interactions received by %s", len(interactions), userHandle)
+	return interactions, nil
 }
