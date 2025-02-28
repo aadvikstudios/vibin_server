@@ -329,25 +329,24 @@ func (s *InteractionService) UpdateInteractionStatus(ctx context.Context, sender
 	return nil
 }
 
-// ✅ GetMutualMatches using GSI instead of scan
 func (s *InteractionService) GetMutualMatches(ctx context.Context, userHandle string) ([]string, error) {
 	log.Printf("🔍 Fetching mutual matches for user: %s", userHandle)
 
-	// ✅ Use GSI from models package
+	// ✅ Use the new index with `PK = userHandle` and `SK = status`
 	indexName := models.StatusIndex
+	keyCondition := "#userHandle = :user AND #status = :matchStatus"
 
-	// ✅ Query where `status = match` and `PK = USER#userHandle`
-	keyCondition := "#PK = :user"
 	expressionValues := map[string]types.AttributeValue{
-		":user":  &types.AttributeValueMemberS{Value: "USER#" + userHandle},
-		":match": &types.AttributeValueMemberS{Value: "match"},
-	}
-	expressionNames := map[string]string{
-		"#PK":     "PK",     // ✅ User handle as partition key
-		"#status": "status", // ✅ Filter only matched interactions
+		":user":        &types.AttributeValueMemberS{Value: userHandle},
+		":matchStatus": &types.AttributeValueMemberS{Value: "match"},
 	}
 
-	// ✅ Use `QueryItemsWithIndex` for efficient querying
+	expressionNames := map[string]string{
+		"#userHandle": "userHandle",
+		"#status":     "status",
+	}
+
+	// ✅ Query using the optimized index
 	items, err := s.Dynamo.QueryItemsWithIndex(ctx, models.InteractionsTable, indexName, keyCondition, expressionValues, expressionNames, 100)
 	if err != nil {
 		log.Printf("❌ Error fetching mutual matches: %v", err)
@@ -362,7 +361,7 @@ func (s *InteractionService) GetMutualMatches(ctx context.Context, userHandle st
 		if err != nil {
 			continue
 		}
-		matches = append(matches, interaction.ReceiverHandle)
+		matches = append(matches, interaction.ReceiverHandle) // Only store receiver handle
 	}
 
 	log.Printf("✅ Found %d matches for %s", len(matches), userHandle)
