@@ -23,9 +23,10 @@ func main() {
 
 	// Initialize Services
 	userProfileService := &services.UserProfileService{Dynamo: dynamoService}
-	interactionService := &services.InteractionService{Dynamo: dynamoService}
-
 	chatService := &services.ChatService{Dynamo: dynamoService}
+
+	interactionService := &services.InteractionService{Dynamo: dynamoService, ChatService: chatService}
+
 	matchService := &services.MatchService{Dynamo: dynamoService}
 	inviteService := &services.InviteService{Dynamo: dynamoService} // ✅ Added Invite Service
 

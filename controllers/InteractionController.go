@@ -67,33 +67,6 @@ func (c *InteractionController) CreateInteractionHandler(w http.ResponseWriter, 
 	json.NewEncoder(w).Encode(response)
 }
 
-// GetUserInteractionsHandler fetches all interactions for a specific user
-// func (c *InteractionController) GetUserInteractionsHandler(w http.ResponseWriter, r *http.Request) {
-// 	userHandle := r.URL.Query().Get("userHandle")
-
-// 	// Validate input
-// 	if userHandle == "" {
-// 		http.Error(w, "Missing userHandle parameter", http.StatusBadRequest)
-// 		return
-// 	}
-
-// 	// Set a timeout for database operations
-// 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-// 	defer cancel()
-
-// 	// Fetch interactions
-// 	interactions, err := c.InteractionService.GetUserInteractions(ctx, userHandle)
-// 	if err != nil {
-// 		log.Printf("❌ Failed to fetch interactions for %s: %v", userHandle, err)
-// 		http.Error(w, "Failed to fetch interactions: "+err.Error(), http.StatusInternalServerError)
-// 		return
-// 	}
-
-// 	// Convert to JSON and send response
-// 	w.Header().Set("Content-Type", "application/json")
-// 	json.NewEncoder(w).Encode(interactions)
-// }
-
 // GetMutualMatchesHandler fetches all mutual matches for a user
 func (c *InteractionController) GetMutualMatchesHandler(w http.ResponseWriter, r *http.Request) {
 	userHandle := r.URL.Query().Get("userHandle")

@@ -16,7 +16,8 @@ import (
 
 // InteractionService handles interactions (like, ping, and matches)
 type InteractionService struct {
-	Dynamo *DynamoService
+	Dynamo      *DynamoService
+	ChatService *ChatService
 }
 
 // GetInteraction retrieves an interaction between two users
@@ -53,8 +54,8 @@ func (s *InteractionService) GetInteraction(ctx context.Context, sender, receive
 	return &interaction, nil
 }
 
-// CreateOrUpdateInteraction handles likes, dislikes, pings, and approvals
-func (s *InteractionService) CreateOrUpdateInteraction(ctx context.Context, sender, receiver, interactionType, action string, message *string) error {
+func (s *InteractionService) CreateOrUpdateInteraction(
+	ctx context.Context, sender, receiver, interactionType, action string, message *string) error {
 	log.Printf("🔄 Processing %s from %s -> %s", interactionType, sender, receiver)
 
 	// Check if an existing interaction exists
@@ -71,24 +72,21 @@ func (s *InteractionService) CreateOrUpdateInteraction(ctx context.Context, send
 	case "like":
 		newStatus = "pending"
 
-		// Check if User B also liked User A (Mutual Match)
-		mutualLike, _ := s.GetInteraction(ctx, receiver, sender)
-		if mutualLike != nil && mutualLike.Status == "pending" {
-			// It's a mutual like, so mark as a match
+		// ✅ Check if it's a mutual match
+		isMatch, err := s.CheckMutualMatch(ctx, sender, receiver)
+		if err != nil {
+			return err
+		}
+
+		// ✅ If mutual match, handle it
+		if isMatch {
 			newStatus = "match"
-			generatedMatchID := uuid.New().String()
-			matchID = &generatedMatchID
-
-			// Update both interactions to "match" status
-			log.Printf("🔥 Mutual Match Found! Updating both interactions: %s <-> %s", sender, receiver)
-
-			// Update UserA -> UserB interaction to "match"
-			err := s.UpdateInteractionStatus(ctx, receiver, sender, "match", matchID, nil)
+			matchID, err = s.HandleMutualMatch(ctx, sender, receiver)
 			if err != nil {
-				log.Printf("❌ Failed to update mutual match for %s -> %s: %v", receiver, sender, err)
 				return err
 			}
 		}
+
 	case "dislike":
 		newStatus = "declined"
 	case "ping":
@@ -117,6 +115,74 @@ func (s *InteractionService) CreateOrUpdateInteraction(ctx context.Context, send
 
 	// 🔥 Otherwise, update existing interaction
 	return s.UpdateInteractionStatus(ctx, sender, receiver, newStatus, matchID, message)
+}
+
+func (s *InteractionService) CheckMutualMatch(ctx context.Context, sender, receiver string) (bool, error) {
+	log.Printf("🔍 Checking for mutual match: %s <-> %s", sender, receiver)
+
+	// Fetch existing interaction (if any) where receiver liked sender
+	mutualLike, err := s.GetInteraction(ctx, receiver, sender)
+	if err != nil {
+		log.Printf("❌ Error fetching interaction for mutual match check: %v", err)
+		return false, err
+	}
+
+	// ✅ If the receiver also liked the sender, it's a mutual match
+	if mutualLike != nil && mutualLike.Status == "pending" {
+		log.Printf("🔥 Mutual Match Found! %s <-> %s", sender, receiver)
+		return true, nil
+	}
+
+	// ❌ No mutual match
+	return false, nil
+}
+func (s *InteractionService) HandleMutualMatch(ctx context.Context, sender, receiver string) (*string, error) {
+	log.Printf("🔄 Handling mutual match update for: %s <-> %s", sender, receiver)
+
+	// Generate a match ID
+	matchID := uuid.New().String()
+
+	// ✅ Update UserB -> UserA interaction to "match"
+	err := s.UpdateInteractionStatus(ctx, receiver, sender, "match", &matchID, nil)
+	if err != nil {
+		log.Printf("❌ Failed to update mutual match for %s -> %s: %v", receiver, sender, err)
+		return nil, err
+	}
+
+	// ✅ Create an initial message
+	err = s.CreateInitialMessage(ctx, sender, receiver, matchID)
+	if err != nil {
+		log.Printf("⚠️ Failed to send initial message for match %s: %v", matchID, err)
+	}
+
+	return &matchID, nil
+}
+
+func (s *InteractionService) CreateInitialMessage(ctx context.Context, sender, receiver, matchID string) error {
+	log.Printf("💬 Creating initial message for matchId: %s between %s & %s", matchID, sender, receiver)
+
+	// ✅ Define the first message
+	initialMessage := models.Message{
+		MatchID:   matchID,
+		MessageID: uuid.New().String(),
+		SenderID:  sender,
+		Content:   "Congratulations! You both liked each other. Say hello! 👋",
+		CreatedAt: time.Now().Format(time.RFC3339), // Store timestamp
+		Liked:     false,                           // Default to false
+	}
+
+	// ✅ Set IsUnread using helper method
+	initialMessage.SetIsUnread(true)
+
+	// ✅ Send message using ChatService
+	err := s.ChatService.SendMessage(ctx, initialMessage)
+	if err != nil {
+		log.Printf("❌ Failed to send initial message: %v", err)
+		return err
+	}
+
+	log.Printf("✅ Initial message sent successfully for matchId: %s", matchID)
+	return nil
 }
 
 // CreateInteraction inserts a new interaction into DynamoDB
