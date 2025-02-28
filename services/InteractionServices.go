@@ -30,11 +30,12 @@ func (s *InteractionService) GetInteraction(ctx context.Context, sender, receive
 
 	item, err := s.Dynamo.GetItem(ctx, models.InteractionsTable, key)
 	if err != nil {
-		log.Printf("❌ Error fetching interaction: %v", err)
+		log.Printf("❌ DynamoDB error while fetching interaction: %v", err)
 		return nil, err
 	}
 	if item == nil {
-		log.Printf("⚠️ No interaction found between %s and %s", sender, receiver)
+		// Do not log this as an error, since it's expected for new users
+		log.Printf("ℹ️ No previous interaction found for %s -> %s. Proceeding to create a new one.", sender, receiver)
 		return nil, nil
 	}
 
@@ -125,6 +126,8 @@ func (s *InteractionService) CreateOrUpdateInteraction(ctx context.Context, send
 
 // CreateInteraction inserts a new interaction into DynamoDB
 func (s *InteractionService) CreateInteraction(ctx context.Context, sender, receiver, interactionType, status string, matchID *string, message *string) error {
+	log.Printf("🆕 Creating a new interaction for %s -> %s", sender, receiver)
+
 	now := time.Now().Format(time.RFC3339)
 	interaction := models.Interaction{
 		PK:              "USER#" + sender,

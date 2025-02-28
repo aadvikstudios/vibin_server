@@ -38,6 +38,8 @@ func (c *InteractionController) CreateInteractionHandler(w http.ResponseWriter, 
 		http.Error(w, "Missing required fields", http.StatusBadRequest)
 		return
 	}
+	log.Printf("🔍 Received interaction request: Sender=%s, Receiver=%s, Type=%s, Action=%s",
+		request.SenderHandle, request.ReceiverHandle, request.InteractionType, request.Action)
 
 	// Set a timeout for database operations
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
