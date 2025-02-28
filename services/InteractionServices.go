@@ -30,12 +30,16 @@ func (s *InteractionService) GetInteraction(ctx context.Context, sender, receive
 
 	item, err := s.Dynamo.GetItem(ctx, models.InteractionsTable, key)
 	if err != nil {
-		log.Printf("❌ DynamoDB error while fetching interaction: %v", err)
+		if strings.Contains(err.Error(), "item not found") {
+			log.Printf("ℹ️ No previous interaction found for %s -> %s. Proceeding to create a new one.", sender, receiver)
+			return nil, nil // ✅ This is expected; allow creation of a new interaction
+		}
+		log.Printf("❌ Unexpected DynamoDB error while fetching interaction: %v", err)
 		return nil, err
 	}
+
 	if item == nil {
-		// Do not log this as an error, since it's expected for new users
-		log.Printf("ℹ️ No previous interaction found for %s -> %s. Proceeding to create a new one.", sender, receiver)
+		log.Printf("ℹ️ No interaction record exists for %s -> %s. Creating a new one.", sender, receiver)
 		return nil, nil
 	}
 
@@ -47,32 +51,6 @@ func (s *InteractionService) GetInteraction(ctx context.Context, sender, receive
 	}
 
 	return &interaction, nil
-}
-
-// GetUserInteractions fetches all interactions involving a specific user
-func (s *InteractionService) GetUserInteractions(ctx context.Context, userHandle string) ([]models.Interaction, error) {
-	log.Printf("🔍 Fetching interactions for user: %s", userHandle)
-
-	keyCondition := "PK = :user"
-	expressionValues := map[string]types.AttributeValue{
-		":user": &types.AttributeValueMemberS{Value: "USER#" + userHandle},
-	}
-
-	items, err := s.Dynamo.QueryItems(ctx, models.InteractionsTable, keyCondition, expressionValues, nil, 100)
-	if err != nil {
-		log.Printf("❌ Error querying interactions: %v", err)
-		return nil, fmt.Errorf("failed to fetch interactions: %w", err)
-	}
-
-	var interactions []models.Interaction
-	err = attributevalue.UnmarshalListOfMaps(items, &interactions)
-	if err != nil {
-		log.Printf("❌ Error unmarshaling interactions: %v", err)
-		return nil, fmt.Errorf("failed to process data: %w", err)
-	}
-
-	log.Printf("✅ Found %d interactions for %s", len(interactions), userHandle)
-	return interactions, nil
 }
 
 // CreateOrUpdateInteraction handles likes, dislikes, pings, and approvals
@@ -116,13 +94,14 @@ func (s *InteractionService) CreateOrUpdateInteraction(ctx context.Context, send
 
 	// 🔥 If the interaction does not exist, create it
 	if existingInteraction == nil {
-		log.Printf("🆕 Interaction does not exist. Creating new interaction...")
+		log.Printf("🆕 No existing interaction found. Creating a new interaction for %s -> %s", sender, receiver)
 		err := s.CreateInteraction(ctx, sender, receiver, interactionType, newStatus, matchID, message)
 		if err != nil {
 			log.Printf("❌ Failed to create interaction: %v", err)
 			return err
 		}
-		return nil // Ensure function exits successfully
+		log.Println("✅ New interaction successfully created.")
+		return nil
 	}
 
 	// 🔥 Otherwise, update existing interaction
@@ -192,7 +171,39 @@ func (s *InteractionService) UpdateInteractionStatus(ctx context.Context, sender
 	}
 
 	_, err := s.Dynamo.UpdateItem(ctx, models.InteractionsTable, updateExpression, key, expressionValues, expressionNames)
-	return err
+	if err != nil {
+		log.Printf("❌ Error updating interaction status: %v", err)
+		return err
+	}
+
+	log.Println("✅ Interaction status successfully updated.")
+	return nil
+}
+
+// GetUserInteractions fetches all interactions involving a specific user
+func (s *InteractionService) GetUserInteractions(ctx context.Context, userHandle string) ([]models.Interaction, error) {
+	log.Printf("🔍 Fetching interactions for user: %s", userHandle)
+
+	keyCondition := "PK = :user"
+	expressionValues := map[string]types.AttributeValue{
+		":user": &types.AttributeValueMemberS{Value: "USER#" + userHandle},
+	}
+
+	items, err := s.Dynamo.QueryItems(ctx, models.InteractionsTable, keyCondition, expressionValues, nil, 100)
+	if err != nil {
+		log.Printf("❌ Error querying interactions: %v", err)
+		return nil, fmt.Errorf("failed to fetch interactions: %w", err)
+	}
+
+	var interactions []models.Interaction
+	err = attributevalue.UnmarshalListOfMaps(items, &interactions)
+	if err != nil {
+		log.Printf("❌ Error unmarshaling interactions: %v", err)
+		return nil, fmt.Errorf("failed to process data: %w", err)
+	}
+
+	log.Printf("✅ Found %d interactions for %s", len(interactions), userHandle)
+	return interactions, nil
 }
 
 // GetMutualMatches fetches all mutual matches for a user
