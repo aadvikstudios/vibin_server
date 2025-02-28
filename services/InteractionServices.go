@@ -328,22 +328,22 @@ func (s *InteractionService) UpdateInteractionStatus(ctx context.Context, sender
 	log.Println("✅ Interaction status successfully updated.")
 	return nil
 }
-
 func (s *InteractionService) GetMutualMatches(ctx context.Context, userHandle string) ([]string, error) {
 	log.Printf("🔍 Fetching mutual matches for user: %s", userHandle)
 
-	// ✅ Use the new index with `PK = userHandle` and `SK = status`
+	// ✅ Use the correct index with `PK = USER#userHandle` and `SK = status`
 	indexName := models.StatusIndex
-	keyCondition := "#userHandle = :user AND #status = :matchStatus"
+	keyCondition := "#PK = :user AND #status = :matchStatus"
 
+	// ✅ Ensure `PK` includes "USER#"
 	expressionValues := map[string]types.AttributeValue{
-		":user":        &types.AttributeValueMemberS{Value: userHandle},
+		":user":        &types.AttributeValueMemberS{Value: "USER#" + userHandle}, // ✅ Correct PK format
 		":matchStatus": &types.AttributeValueMemberS{Value: "match"},
 	}
 
 	expressionNames := map[string]string{
-		"#userHandle": "userHandle",
-		"#status":     "status",
+		"#PK":     "PK", // ✅ Match the GSI PK (which now follows table PK format)
+		"#status": "status",
 	}
 
 	// ✅ Query using the optimized index
@@ -359,12 +359,19 @@ func (s *InteractionService) GetMutualMatches(ctx context.Context, userHandle st
 		var interaction models.Interaction
 		err := attributevalue.UnmarshalMap(item, &interaction)
 		if err != nil {
+			log.Printf("⚠️ Skipping item due to unmarshalling error: %v", err)
 			continue
 		}
-		matches = append(matches, interaction.ReceiverHandle) // Only store receiver handle
+
+		// ✅ Ensure the receiverHandle is valid before appending
+		if interaction.ReceiverHandle != "" {
+			matches = append(matches, interaction.ReceiverHandle)
+		} else {
+			log.Printf("⚠️ Skipping item with empty receiverHandle: %+v", interaction)
+		}
 	}
 
-	log.Printf("✅ Found %d matches for %s", len(matches), userHandle)
+	log.Printf("✅ Found %d mutual matches for %s", len(matches), userHandle)
 	return matches, nil
 }
 
