@@ -435,12 +435,33 @@ func (s *InteractionService) GetMutualMatches(ctx context.Context, userHandle st
 			message = *interaction.Message
 		}
 
+		// Determine which handle to fetch profile for
+		matchedUserHandle := interaction.ReceiverHandle
+		if matchedUserHandle == userHandle {
+			matchedUserHandle = interaction.SenderHandle // Reverse if needed
+		}
+
 		// 🔍 Fetch user profile for the matched user
-		log.Printf("🔍 Fetching profile for user: %s", interaction.ReceiverHandle)
-		profile, err := s.UserProfileService.GetUserProfileByHandle(ctx, interaction.ReceiverHandle)
+		log.Printf("🔍 Fetching profile for user: %s", matchedUserHandle)
+		profile, err := s.UserProfileService.GetUserProfileByHandle(ctx, matchedUserHandle)
 		if err != nil {
-			log.Printf("⚠️ Failed to fetch profile for %s: %v", interaction.ReceiverHandle, err)
+			log.Printf("⚠️ Failed to fetch profile for %s: %v", matchedUserHandle, err)
 			continue // Skip this match if profile lookup fails
+		}
+
+		// ✅ Ensure interests and photos are safely unmarshalled
+		var interests []string
+		if profile.Interests != nil {
+			interests = profile.Interests
+		} else {
+			interests = []string{}
+		}
+
+		var photos []string
+		if profile.Photos != nil && len(profile.Photos) > 0 {
+			photos = profile.Photos
+		} else {
+			photos = []string{"https://via.placeholder.com/100"} // Default photo
 		}
 
 		// ✅ Append to results with only relevant fields
@@ -451,16 +472,16 @@ func (s *InteractionService) GetMutualMatches(ctx context.Context, userHandle st
 			Message:         message, // ✅ Safe from nil dereference
 			Status:          interaction.Status,
 			CreatedAt:       interaction.CreatedAt,
-
+			MatchID:         *interaction.MatchID,
 			// Extracted profile fields
 			Name:        profile.Name,
 			Age:         profile.Age,
 			Gender:      profile.Gender,
 			Orientation: profile.Orientation,
 			LookingFor:  profile.LookingFor,
-			Photos:      profile.Photos,
+			Photos:      photos, // ✅ Safe array handling
 			Bio:         profile.Bio,
-			Interests:   profile.Interests,
+			Interests:   interests, // ✅ Safe array handling
 		})
 	}
 
