@@ -385,7 +385,8 @@ func (s *InteractionService) UpdateInteractionStatus(ctx context.Context, sender
 func (s *InteractionService) GetMutualMatches(ctx context.Context, userHandle string) ([]models.InteractionWithProfile, error) {
 	log.Printf("🔍 Fetching mutual matches for user: %s", userHandle)
 
-	indexName := models.StatusIndex
+	// Define the Global Secondary Index (GSI) for querying matches
+	indexName := "status-index" // Ensure this is correctly configured in DynamoDB
 	keyCondition := "#PK = :user AND #status = :matchStatus"
 
 	expressionValues := map[string]types.AttributeValue{
@@ -398,15 +399,28 @@ func (s *InteractionService) GetMutualMatches(ctx context.Context, userHandle st
 		"#status": "status",
 	}
 
-	// Query for interactions
+	// 🔍 Log query parameters for debugging
+	log.Printf("🔍 Querying `status-index` with PK=%s and status=match", "USER#"+userHandle)
+
+	// Query DynamoDB using the Global Secondary Index
 	items, err := s.Dynamo.QueryItemsWithIndex(ctx, models.InteractionsTable, indexName, keyCondition, expressionValues, expressionNames, 100)
 	if err != nil {
-		log.Printf("❌ Error fetching mutual matches: %v", err)
+		log.Printf("❌ Error fetching mutual matches from DynamoDB: %v", err)
 		return nil, fmt.Errorf("failed to fetch matches: %w", err)
+	}
+
+	// 🔥 Log raw DynamoDB query result
+	log.Printf("📦 Retrieved %d items from `status-index` for user %s", len(items), userHandle)
+
+	// If no matches found, return an empty slice instead of nil
+	if len(items) == 0 {
+		log.Printf("⚠️ No mutual matches found for user: %s", userHandle)
+		return []models.InteractionWithProfile{}, nil
 	}
 
 	var matchesWithProfiles []models.InteractionWithProfile
 
+	// Process each interaction record
 	for _, item := range items {
 		var interaction models.Interaction
 		err := attributevalue.UnmarshalMap(item, &interaction)
@@ -415,19 +429,26 @@ func (s *InteractionService) GetMutualMatches(ctx context.Context, userHandle st
 			continue
 		}
 
-		// Fetch user profile (extracting only needed fields)
+		// ✅ Prevent nil pointer dereference for `interaction.Message`
+		message := ""
+		if interaction.Message != nil {
+			message = *interaction.Message
+		}
+
+		// 🔍 Fetch user profile for the matched user
+		log.Printf("🔍 Fetching profile for user: %s", interaction.ReceiverHandle)
 		profile, err := s.UserProfileService.GetUserProfileByHandle(ctx, interaction.ReceiverHandle)
 		if err != nil {
 			log.Printf("⚠️ Failed to fetch profile for %s: %v", interaction.ReceiverHandle, err)
-			continue
+			continue // Skip this match if profile lookup fails
 		}
 
-		// Append only selected fields
+		// ✅ Append to results with only relevant fields
 		matchesWithProfiles = append(matchesWithProfiles, models.InteractionWithProfile{
 			ReceiverHandle:  interaction.ReceiverHandle,
 			SenderHandle:    interaction.SenderHandle,
 			InteractionType: interaction.InteractionType,
-			Message:         *interaction.Message,
+			Message:         message, // ✅ Safe from nil dereference
 			Status:          interaction.Status,
 			CreatedAt:       interaction.CreatedAt,
 

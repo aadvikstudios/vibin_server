@@ -161,9 +161,13 @@ func (c *InteractionController) GetMutualMatchesHandler(w http.ResponseWriter, r
 	// Convert to JSON and send response
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
+	if matches == nil {
+		matches = []models.InteractionWithProfile{}
+	}
 	json.NewEncoder(w).Encode(struct {
 		Matches []models.InteractionWithProfile `json:"matches"`
 	}{matches})
+
 }
 
 // GetSentInteractionsHandler fetches all sent interactions for a user
