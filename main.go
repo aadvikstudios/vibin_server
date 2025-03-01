@@ -25,7 +25,7 @@ func main() {
 	userProfileService := &services.UserProfileService{Dynamo: dynamoService}
 	chatService := &services.ChatService{Dynamo: dynamoService}
 	interactionService := &services.InteractionService{Dynamo: dynamoService, UserProfileService: userProfileService, ChatService: chatService}
-	groupInteractionService := &services.GroupInteractionService{Dynamo: dynamoService}
+	groupInteractionService := &services.GroupInteractionService{Dynamo: dynamoService, UserProfileService: userProfileService}
 
 	// Set up the server port
 	port := os.Getenv("PORT")

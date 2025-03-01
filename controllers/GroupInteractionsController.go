@@ -33,6 +33,12 @@ func (c *GroupInteractionController) CreateGroupInvite(w http.ResponseWriter, r 
 		return
 	}
 
+	// ✅ Validate that all required fields are provided
+	if inviteRequest.InviterHandle == "" || inviteRequest.ApproverHandle == "" || inviteRequest.InviteeHandle == "" {
+		http.Error(w, "Missing required fields", http.StatusBadRequest)
+		return
+	}
+
 	// Create invite object
 	invite := models.GroupInteraction{
 		PK:              "USER#" + inviteRequest.InviterHandle,
@@ -48,8 +54,13 @@ func (c *GroupInteractionController) CreateGroupInvite(w http.ResponseWriter, r 
 		LastUpdated:     time.Now(),
 	}
 
-	// Call service layer to save invite
-	if err := c.service.CreateGroupInvite(context.Background(), invite); err != nil {
+	// ✅ Call service layer to validate and save invite
+	err := c.service.CreateGroupInvite(context.Background(), invite)
+	if err != nil {
+		if err.Error() == "invitee handle does not exist" {
+			http.Error(w, "Invitee handle does not exist", http.StatusNotFound)
+			return
+		}
 		http.Error(w, "Failed to create group invite", http.StatusInternalServerError)
 		return
 	}

@@ -13,11 +13,22 @@ import (
 
 // GroupInteractionService handles operations related to group invites and approvals
 type GroupInteractionService struct {
-	Dynamo *DynamoService
+	Dynamo             *DynamoService
+	UserProfileService *UserProfileService
 }
 
-// ✅ CreateGroupInvite - Adds a new group invite to DynamoDB
+// ✅ CreateGroupInvite - Adds a new group invite to DynamoDB after validating the InviteeHandle
 func (s *GroupInteractionService) CreateGroupInvite(ctx context.Context, invite models.GroupInteraction) error {
+	// ✅ Step 1: Validate InviteeHandle (Check if user exists)
+	profile, err := s.UserProfileService.GetUserProfileByHandle(ctx, invite.InviteeHandle)
+	if err != nil {
+		return errors.New("failed to validate invitee handle")
+	}
+	if profile == nil {
+		return errors.New("invitee handle does not exist")
+	}
+
+	// ✅ Step 2: Store the invite in DynamoDB
 	return s.Dynamo.PutItem(ctx, models.GroupInteractionsTable, invite)
 }
 
