@@ -39,7 +39,7 @@ func (c *GroupInteractionController) CreateGroupInvite(w http.ResponseWriter, r 
 		return
 	}
 
-	// Create invite object
+	// ✅ Call service layer to validate and save invite
 	invite := models.GroupInteraction{
 		PK:              "USER#" + inviteRequest.InviterHandle,
 		SK:              "GROUP_INVITE#" + inviteRequest.InviteeHandle,
@@ -54,13 +54,15 @@ func (c *GroupInteractionController) CreateGroupInvite(w http.ResponseWriter, r 
 		LastUpdated:     time.Now(),
 	}
 
-	// ✅ Call service layer to validate and save invite
 	err := c.service.CreateGroupInvite(context.Background(), invite)
 	if err != nil {
-		if err.Error() == "invitee handle does not exist" {
+		// ✅ Handle invalid invitee case separately
+		if err.Error() == "invalid_invitee_handle" {
 			http.Error(w, "Invitee handle does not exist", http.StatusNotFound)
 			return
 		}
+
+		// ✅ Return generic internal error if anything else fails
 		http.Error(w, "Failed to create group invite", http.StatusInternalServerError)
 		return
 	}

@@ -22,13 +22,13 @@ func (s *GroupInteractionService) CreateGroupInvite(ctx context.Context, invite 
 	// ✅ Step 1: Validate InviteeHandle (Check if user exists)
 	profile, err := s.UserProfileService.GetUserProfileByHandle(ctx, invite.InviteeHandle)
 	if err != nil {
-		return errors.New("failed to validate invitee handle")
+		return errors.New("failed to validate invitee handle") // Keep it generic for logging purposes
 	}
 	if profile == nil {
-		return errors.New("invitee handle does not exist")
+		return errors.New("invalid_invitee_handle") // Use a specific error for better handling in the controller
 	}
 
-	// ✅ Step 2: Store the invite in DynamoDB
+	// ✅ Step 2: Store the invite in DynamoDB (only if validation succeeds)
 	return s.Dynamo.PutItem(ctx, models.GroupInteractionsTable, invite)
 }
 
