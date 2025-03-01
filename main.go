@@ -24,12 +24,7 @@ func main() {
 	// Initialize Services
 	userProfileService := &services.UserProfileService{Dynamo: dynamoService}
 	chatService := &services.ChatService{Dynamo: dynamoService}
-
 	interactionService := &services.InteractionService{Dynamo: dynamoService, UserProfileService: userProfileService, ChatService: chatService}
-
-	matchService := &services.MatchService{Dynamo: dynamoService}
-	inviteService := &services.InviteService{Dynamo: dynamoService} // ✅ Added Invite Service
-
 	// Set up the server port
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -55,8 +50,6 @@ func main() {
 	// Register routes
 	routes.RegisterUserProfileRoutes(r, userProfileService)
 	routes.RegisterChatRoutes(r, chatService)
-	routes.RegisterMatchRoutes(r, matchService)
-	routes.RegisterPendingInviteRoutes(r, inviteService) // ✅ Added Invite Routes
 	routes.RegisterInteractionsRoutes(r, interactionService)
 	routes.RegisterS3Routes(r)
 
