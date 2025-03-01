@@ -133,9 +133,9 @@ func (s *GroupInteractionService) ApproveOrDeclineInvite(ctx context.Context, ap
 		return errors.New("invalid status value")
 	}
 
-	// ✅ Fetch the existing invite
+	// ✅ Fetch the existing invite (Fix: Use the correct SK format)
 	pk := "USER#" + approverHandle
-	sk := "PENDING_APPROVAL#GROUP_INVITE#" + inviteeHandle
+	sk := "GROUP_INVITE#" + inviteeHandle // 🔥 FIXED HERE
 
 	log.Printf("📌 Fetching pending invite from GroupInteractions - PK: %s, SK: %s", pk, sk)
 	invite, err := s.getGroupInteraction(ctx, pk, sk)
@@ -147,6 +147,8 @@ func (s *GroupInteractionService) ApproveOrDeclineInvite(ctx context.Context, ap
 		log.Printf("⚠️ Invite not found for Approver: %s, Invitee: %s", approverHandle, inviteeHandle)
 		return errors.New("invite not found")
 	}
+
+	log.Printf("✅ Invite found: %+v", invite)
 
 	// ✅ If approved, generate a group ID
 	var groupId *string
