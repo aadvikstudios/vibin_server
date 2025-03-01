@@ -186,30 +186,35 @@ func (s *GroupInteractionService) ApproveOrDeclineInvite(ctx context.Context, ap
 func (s *GroupInteractionService) GetActiveGroups(ctx context.Context, userHandle string) ([]models.GroupInteraction, error) {
 	log.Printf("🔍 Searching for active groups where user '%s' is a participant", userHandle)
 
-	// Define Key Condition Expression for querying user's groups
+	// ✅ Query groups for the given user handle
 	keyCondition := "PK = :pk"
 	expressionValues := map[string]types.AttributeValue{
 		":pk": &types.AttributeValueMemberS{Value: "USER#" + userHandle},
 	}
 
-	// Query DynamoDB for all groups the user is in
+	// 🔍 Query DynamoDB
 	items, err := s.Dynamo.QueryItems(ctx, models.GroupInteractionsTable, keyCondition, expressionValues, nil, 100)
 	if err != nil {
 		log.Printf("❌ Error querying active groups for user '%s': %v", userHandle, err)
 		return nil, err
 	}
 
-	// Convert to Go struct
+	// ✅ Convert to Go struct
 	var allGroups []models.GroupInteraction
 	if err := attributevalue.UnmarshalListOfMaps(items, &allGroups); err != nil {
 		log.Printf("❌ Error unmarshaling groups for '%s': %v", userHandle, err)
 		return nil, err
 	}
 
-	// ✅ Filter for active groups where the user is in the members list
+	// ✅ Step 3: Filter for active `group_chat` interactions
 	var activeGroups []models.GroupInteraction
 	for _, group := range allGroups {
-		if group.Status == "active" && contains(group.Members, userHandle) {
+		log.Printf("🔍 Checking group %s with status %s", group.GroupID, group.Status)
+
+		// ✅ Directly use `group.Members` since it's already []string
+		if group.Status == "active" &&
+			group.InteractionType == "group_chat" &&
+			contains(group.Members, userHandle) { // Directly check in []string
 			activeGroups = append(activeGroups, group)
 		}
 	}
@@ -288,7 +293,6 @@ func (s *GroupInteractionService) createGroupInteractionForInvitee(ctx context.C
 	return s.Dynamo.PutItem(ctx, models.GroupInteractionsTable, inviteForInvitee)
 }
 
-// ✅ Helper function to check if user is in members list
 func contains(members []string, userHandle string) bool {
 	for _, member := range members {
 		if member == userHandle {
