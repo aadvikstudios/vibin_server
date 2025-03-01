@@ -113,6 +113,7 @@ func (c *GroupInteractionController) GetPendingApprovals(w http.ResponseWriter, 
 func (c *GroupInteractionController) ApproveOrDeclineInvite(w http.ResponseWriter, r *http.Request) {
 	var approvalRequest struct {
 		ApproverHandle string `json:"approverHandle"`
+		InviterHandle  string `json:"inviterHandle"`
 		InviteeHandle  string `json:"inviteeHandle"`
 		Status         string `json:"status"` // "approved" or "declined"
 	}
@@ -130,7 +131,7 @@ func (c *GroupInteractionController) ApproveOrDeclineInvite(w http.ResponseWrite
 	}
 
 	// Call service layer to approve/decline invite
-	err := c.service.ApproveOrDeclineInvite(context.Background(), approvalRequest.ApproverHandle, approvalRequest.InviteeHandle, approvalRequest.Status)
+	err := c.service.ApproveOrDeclineInvite(context.Background(), approvalRequest.ApproverHandle, approvalRequest.InviterHandle, approvalRequest.InviteeHandle, approvalRequest.Status)
 	if err != nil {
 		http.Error(w, "Failed to update invite status", http.StatusInternalServerError)
 		return

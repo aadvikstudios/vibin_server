@@ -124,8 +124,8 @@ func (s *GroupInteractionService) GetPendingApprovals(ctx context.Context, appro
 }
 
 // ✅ ApproveOrDeclineInvite - Approves or declines a pending invite
-func (s *GroupInteractionService) ApproveOrDeclineInvite(ctx context.Context, approverHandle, inviteeHandle, status string) error {
-	log.Printf("🔍 ApproveOrDeclineInvite: Processing request for Approver: %s, Invitee: %s, Status: %s", approverHandle, inviteeHandle, status)
+func (s *GroupInteractionService) ApproveOrDeclineInvite(ctx context.Context, approverHandle, inviterHandle, inviteeHandle, status string) error {
+	log.Printf("🔍 ApproveOrDeclineInvite: Processing request for Approver: %s, Inviter: %s, Invitee: %s, Status: %s", approverHandle, inviterHandle, inviteeHandle, status)
 
 	// ✅ Validate status
 	if status != "approved" && status != "declined" {
@@ -133,18 +133,18 @@ func (s *GroupInteractionService) ApproveOrDeclineInvite(ctx context.Context, ap
 		return errors.New("invalid status value")
 	}
 
-	// ✅ Fetch the existing invite (Fix: Use the correct SK format)
-	pk := "USER#" + approverHandle
-	sk := "GROUP_INVITE#" + inviteeHandle // 🔥 FIXED HERE
+	// ✅ Fetch the existing invite (Fix: Use the correct PK & SK format)
+	pk := "USER#" + inviterHandle // 🔥 FIXED: Using inviterHandle as PK
+	sk := "GROUP_INVITE#" + inviteeHandle
 
 	log.Printf("📌 Fetching pending invite from GroupInteractions - PK: %s, SK: %s", pk, sk)
 	invite, err := s.getGroupInteraction(ctx, pk, sk)
 	if err != nil {
-		log.Printf("❌ Error fetching invite for Approver: %s, Invitee: %s - Error: %v", approverHandle, inviteeHandle, err)
+		log.Printf("❌ Error fetching invite for Inviter: %s, Invitee: %s - Error: %v", inviterHandle, inviteeHandle, err)
 		return err
 	}
 	if invite == nil {
-		log.Printf("⚠️ Invite not found for Approver: %s, Invitee: %s", approverHandle, inviteeHandle)
+		log.Printf("⚠️ Invite not found for Inviter: %s, Invitee: %s", inviterHandle, inviteeHandle)
 		return errors.New("invite not found")
 	}
 
@@ -179,7 +179,7 @@ func (s *GroupInteractionService) ApproveOrDeclineInvite(ctx context.Context, ap
 		}
 	}
 
-	log.Printf("✅ Successfully processed invite for Approver: %s, Invitee: %s with Status: %s", approverHandle, inviteeHandle, status)
+	log.Printf("✅ Successfully processed invite for Approver: %s, Inviter: %s, Invitee: %s with Status: %s", approverHandle, inviterHandle, inviteeHandle, status)
 	return nil
 }
 
