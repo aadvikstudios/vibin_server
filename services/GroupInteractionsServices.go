@@ -123,60 +123,61 @@ func (s *GroupInteractionService) GetPendingApprovals(ctx context.Context, appro
 	return pendingInvites, nil
 }
 
-// ✅ ApproveOrDeclineInvite - Approves or declines a pending invite with detailed logging
+// ✅ ApproveOrDeclineInvite - Approves or declines a pending invite
 func (s *GroupInteractionService) ApproveOrDeclineInvite(ctx context.Context, approverHandle, inviteeHandle, status string) error {
 	log.Printf("🔍 ApproveOrDeclineInvite: Processing request for Approver: %s, Invitee: %s, Status: %s", approverHandle, inviteeHandle, status)
 
-	// Validate status
+	// ✅ Validate status
 	if status != "approved" && status != "declined" {
-		log.Printf("❌ Invalid status received: %s", status)
+		log.Printf("❌ Invalid status value: %s. Expected 'approved' or 'declined'.", status)
 		return errors.New("invalid status value")
 	}
 
-	// Fetch existing invite
-	log.Printf("📌 Fetching pending invite for Approver: %s, Invitee: %s", approverHandle, inviteeHandle)
-	invite, err := s.getGroupInteraction(ctx, "USER#"+approverHandle, "PENDING_APPROVAL#GROUP_INVITE#"+inviteeHandle)
+	// ✅ Fetch the existing invite
+	pk := "USER#" + approverHandle
+	sk := "PENDING_APPROVAL#GROUP_INVITE#" + inviteeHandle
+
+	log.Printf("📌 Fetching pending invite from GroupInteractions - PK: %s, SK: %s", pk, sk)
+	invite, err := s.getGroupInteraction(ctx, pk, sk)
 	if err != nil {
 		log.Printf("❌ Error fetching invite for Approver: %s, Invitee: %s - Error: %v", approverHandle, inviteeHandle, err)
 		return err
 	}
-	log.Printf("✅ Found invite: %+v", invite)
+	if invite == nil {
+		log.Printf("⚠️ Invite not found for Approver: %s, Invitee: %s", approverHandle, inviteeHandle)
+		return errors.New("invite not found")
+	}
 
-	// If approved, generate a group ID
+	// ✅ If approved, generate a group ID
 	var groupId *string
 	if status == "approved" {
 		newGroupId := uuid.New().String()
 		groupId = &newGroupId
-		log.Printf("🔹 Generated new Group ID: %s for Approver: %s, Invitee: %s", *groupId, approverHandle, inviteeHandle)
+		log.Printf("✅ Approved! Assigning new GroupID: %s", *groupId)
 	}
 
-	// Update the invite status
-	log.Printf("✏️ Updating invite status to: %s", status)
+	// ✅ Update the invite status
 	invite.Status = status
 	invite.GroupID = groupId
 	invite.Members = append(invite.Members, invite.InviteeHandle) // Add invitee to members list
 	invite.LastUpdated = time.Now()
-	log.Printf("🛠️ Updated invite details: %+v", invite)
 
-	// Save updated invite
-	log.Printf("💾 Saving updated invite in the database...")
+	log.Printf("📤 Saving updated invite in DynamoDB: %+v", invite)
 	if err := s.updateGroupInteraction(ctx, *invite); err != nil {
-		log.Printf("❌ Error updating invite in database: %v", err)
+		log.Printf("❌ Error updating invite in DynamoDB: %v", err)
 		return err
 	}
-	log.Printf("✅ Successfully updated invite in database.")
 
-	// If approved, add the group interaction for the invitee
+	// ✅ If approved, create the group interaction for the invitee
 	if status == "approved" {
-		log.Printf("🔗 Creating group interaction for invitee: %s in group: %s", inviteeHandle, *groupId)
+		log.Printf("📌 Creating group interaction for Invitee: %s in Group: %s", invite.InviteeHandle, *groupId)
 		if err := s.createGroupInteractionForInvitee(ctx, *invite, *groupId); err != nil {
-			log.Printf("❌ Error creating group interaction for invitee: %v", err)
+			log.Printf("❌ Error creating group interaction for Invitee: %s - Error: %v", invite.InviteeHandle, err)
 			return err
 		}
-		log.Printf("✅ Successfully added invitee to the group: %s", *groupId)
 	}
 
-	log.Printf("🎉 Invite processing completed successfully for Approver: %s, Invitee: %s, Status: %s", approverHandle, inviteeHandle, status)
+	log.Printf("✅ Successfully processed invite for Approver: %s, Invitee: %s with Status: %s", approverHandle, inviteeHandle, status)
 	return nil
 }
 
