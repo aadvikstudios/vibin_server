@@ -55,17 +55,22 @@ func (s *GroupInteractionService) GetSentInvites(ctx context.Context, userHandle
 func (s *GroupInteractionService) GetPendingApprovals(ctx context.Context, approverHandle string) ([]models.GroupInteraction, error) {
 	log.Printf("🔍 Fetching pending approvals for approverHandle: %s", approverHandle)
 
-	keyCondition := "approverHandle = :approver AND status = :status"
+	keyCondition := "approverHandle = :approver AND #status = :status" // ✅ Use #status instead of status
 	expressionValues := map[string]types.AttributeValue{
 		":approver": &types.AttributeValueMemberS{Value: approverHandle},
 		":status":   &types.AttributeValueMemberS{Value: "pending"},
 	}
 
+	// ✅ Define Expression Attribute Names to handle reserved keywords
+	expressionNames := map[string]string{
+		"#status": "status", // ✅ Map #status to status to bypass reserved keyword issue
+	}
+
 	log.Printf("📌 DynamoDB Query - Table: %s, Index: %s, KeyCondition: %s, Values: %+v",
 		models.GroupInteractionsTable, models.ApprovalIndex, keyCondition, expressionValues)
 
-	// ✅ Fix: Set a valid limit (e.g., 100) instead of 0
-	items, err := s.Dynamo.QueryItemsWithIndex(ctx, models.GroupInteractionsTable, models.ApprovalIndex, keyCondition, expressionValues, nil, 100)
+	// ✅ Pass expressionNames to the query
+	items, err := s.Dynamo.QueryItemsWithIndex(ctx, models.GroupInteractionsTable, models.ApprovalIndex, keyCondition, expressionValues, expressionNames, 100)
 	if err != nil {
 		log.Printf("❌ Error querying DynamoDB: %v", err)
 		return nil, err
