@@ -318,7 +318,7 @@ func (s *InteractionService) CreateInitialMessage(ctx context.Context, sender, r
 	} else {
 		// ✅ Default message for mutual like
 		content = "Congratulations! You both liked each other. Say hello! 👋"
-		originalSender = sender
+		originalSender = ""
 	}
 
 	// ✅ Define the first message
