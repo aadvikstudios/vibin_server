@@ -49,7 +49,7 @@ func (c *GroupInteractionController) CreateGroupInvite(w http.ResponseWriter, r 
 		InviterHandle:   inviteRequest.InviterHandle,
 		ApproverHandle:  inviteRequest.ApproverHandle,
 		InviteeHandle:   inviteRequest.InviteeHandle,
-		Members:         []string{inviteRequest.InviterHandle, inviteRequest.ApproverHandle},
+		Members:         []string{inviteRequest.InviterHandle, inviteRequest.ApproverHandle, inviteRequest.InviteeHandle},
 		CreatedAt:       time.Now(),
 		LastUpdated:     time.Now(),
 	}

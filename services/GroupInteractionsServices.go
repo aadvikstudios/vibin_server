@@ -54,22 +54,32 @@ func (s *GroupInteractionService) GetSentInvites(ctx context.Context, userHandle
 
 // ✅ GetPendingApprovals - Fetches pending invites for User B
 func (s *GroupInteractionService) GetPendingApprovals(ctx context.Context, approverHandle string) ([]models.GroupInteraction, error) {
+	log.Printf("🔍 Fetching pending approvals for approverHandle: %s", approverHandle)
+
 	keyCondition := "approverHandle = :approver AND status = :status"
 	expressionValues := map[string]types.AttributeValue{
 		":approver": &types.AttributeValueMemberS{Value: approverHandle},
 		":status":   &types.AttributeValueMemberS{Value: "pending"},
 	}
 
+	log.Printf("📌 DynamoDB Query - Table: %s, Index: %s, KeyCondition: %s, Values: %+v",
+		models.GroupInteractionsTable, models.ApprovalIndex, keyCondition, expressionValues)
+
 	items, err := s.Dynamo.QueryItemsWithIndex(ctx, models.GroupInteractionsTable, models.ApprovalIndex, keyCondition, expressionValues, nil, 0)
 	if err != nil {
+		log.Printf("❌ Error querying DynamoDB: %v", err)
 		return nil, err
 	}
+
+	log.Printf("✅ Query successful. Items retrieved: %d", len(items))
 
 	var pendingInvites []models.GroupInteraction
 	if err := attributevalue.UnmarshalListOfMaps(items, &pendingInvites); err != nil {
+		log.Printf("❌ Error unmarshaling DynamoDB items: %v", err)
 		return nil, err
 	}
 
+	log.Printf("✅ Successfully retrieved %d pending invites", len(pendingInvites))
 	return pendingInvites, nil
 }
 
