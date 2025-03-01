@@ -133,8 +133,8 @@ func (s *GroupInteractionService) ApproveOrDeclineInvite(ctx context.Context, ap
 		return errors.New("invalid status value")
 	}
 
-	// ✅ Fetch the existing invite (Fix: Use the correct PK & SK format)
-	pk := "USER#" + inviterHandle // 🔥 FIXED: Using inviterHandle as PK
+	// ✅ Fetch the existing invite
+	pk := "USER#" + inviterHandle
 	sk := "GROUP_INVITE#" + inviteeHandle
 
 	log.Printf("📌 Fetching pending invite from GroupInteractions - PK: %s, SK: %s", pk, sk)
@@ -150,9 +150,11 @@ func (s *GroupInteractionService) ApproveOrDeclineInvite(ctx context.Context, ap
 
 	log.Printf("✅ Invite found: %+v", invite)
 
-	// ✅ If approved, generate a group ID
+	// ✅ If approved, generate a group ID (if not already present)
 	var groupId *string
-	if status == "approved" {
+	if invite.GroupID != nil {
+		groupId = invite.GroupID
+	} else if status == "approved" {
 		newGroupId := uuid.New().String()
 		groupId = &newGroupId
 		log.Printf("✅ Approved! Assigning new GroupID: %s", *groupId)
@@ -161,7 +163,6 @@ func (s *GroupInteractionService) ApproveOrDeclineInvite(ctx context.Context, ap
 	// ✅ Update the invite status
 	invite.Status = status
 	invite.GroupID = groupId
-	invite.Members = append(invite.Members, invite.InviteeHandle) // Add invitee to members list
 	invite.LastUpdated = time.Now()
 
 	log.Printf("📤 Saving updated invite in DynamoDB: %+v", invite)
@@ -170,13 +171,37 @@ func (s *GroupInteractionService) ApproveOrDeclineInvite(ctx context.Context, ap
 		return err
 	}
 
-	// ✅ If approved, create the group interaction for the invitee
-	if status == "approved" {
-		log.Printf("📌 Creating group interaction for Invitee: %s in Group: %s", invite.InviteeHandle, *groupId)
-		if err := s.createGroupInteractionForInvitee(ctx, *invite, *groupId); err != nil {
-			log.Printf("❌ Error creating group interaction for Invitee: %s - Error: %v", invite.InviteeHandle, err)
-			return err
-		}
+	// ✅ If declined, return early
+	if status == "declined" {
+		log.Printf("🚫 Invite declined. No group record created.")
+		return nil
+	}
+
+	// ✅ Create separate records for Approver, Inviter, and Invitee
+	members := []string{approverHandle, inviterHandle, inviteeHandle}
+
+	// ✅ Prepare batch write request
+	var groupRecords []models.GroupInteraction
+	for _, member := range members {
+		groupRecords = append(groupRecords, models.GroupInteraction{
+			PK:              "USER#" + member,
+			SK:              "GROUP#" + *groupId,
+			InteractionType: "group_chat",
+			Status:          "active",
+			GroupID:         groupId,
+			InviterHandle:   inviterHandle,
+			ApproverHandle:  approverHandle,
+			InviteeHandle:   inviteeHandle,
+			Members:         members,
+			CreatedAt:       time.Now(),
+			LastUpdated:     time.Now(),
+		})
+	}
+
+	log.Printf("📌 Creating group records for Approver, Inviter, and Invitee")
+	if err := s.createBatchGroupInteractions(ctx, groupRecords); err != nil {
+		log.Printf("❌ Error creating group records: %v", err)
+		return err
 	}
 
 	log.Printf("✅ Successfully processed invite for Approver: %s, Inviter: %s, Invitee: %s with Status: %s", approverHandle, inviterHandle, inviteeHandle, status)
@@ -300,4 +325,30 @@ func contains(members []string, userHandle string) bool {
 		}
 	}
 	return false
+}
+
+// ✅ createBatchGroupInteractions - Adds multiple group records in a single batch write
+func (s *GroupInteractionService) createBatchGroupInteractions(ctx context.Context, groupRecords []models.GroupInteraction) error {
+	var writeRequests []types.WriteRequest
+
+	for _, record := range groupRecords {
+		item, err := attributevalue.MarshalMap(record)
+		if err != nil {
+			log.Printf("❌ Error marshalling group interaction record: %v", err)
+			return err
+		}
+
+		writeRequests = append(writeRequests, types.WriteRequest{
+			PutRequest: &types.PutRequest{Item: item},
+		})
+	}
+
+	err := s.Dynamo.BatchWriteItems(ctx, models.GroupInteractionsTable, writeRequests)
+	if err != nil {
+		log.Printf("❌ Error in batch write: %v", err)
+		return err
+	}
+
+	log.Printf("✅ Successfully inserted %d group records", len(groupRecords))
+	return nil
 }
