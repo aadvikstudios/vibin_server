@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"log"
 	"time"
 	"vibin_server/models"
 
@@ -19,19 +20,31 @@ type GroupInteractionService struct {
 
 // ✅ CreateGroupInvite - Adds a new group invite to DynamoDB after validating the InviteeHandle
 func (s *GroupInteractionService) CreateGroupInvite(ctx context.Context, invite models.GroupInteraction) error {
+	log.Printf("🔍 Validating invitee handle: %s", invite.InviteeHandle)
+
 	// ✅ Step 1: Validate InviteeHandle (Check if user exists)
 	isAvailable, err := s.UserProfileService.IsUserHandleAvailable(ctx, invite.InviteeHandle)
-	// Check if userhandle exists
 	if err != nil {
+		log.Printf("❌ Failed to validate invitee handle '%s': %v", invite.InviteeHandle, err)
 		return errors.New("failed to validate invitee handle") // Keep it generic for logging purposes
 	}
 
+	// If the handle is available (i.e., user does not exist), reject the invite
 	if isAvailable {
+		log.Printf("🚫 Invalid invitee handle: '%s' does not exist in the system", invite.InviteeHandle)
 		return errors.New("invalid_invitee_handle") // Use a specific error for better handling in the controller
 	}
 
 	// ✅ Step 2: Store the invite in DynamoDB (only if validation succeeds)
-	return s.Dynamo.PutItem(ctx, models.GroupInteractionsTable, invite)
+	log.Printf("✅ Invitee handle '%s' is valid. Proceeding to store the invite in DynamoDB.", invite.InviteeHandle)
+	err = s.Dynamo.PutItem(ctx, models.GroupInteractionsTable, invite)
+	if err != nil {
+		log.Printf("❌ Failed to store group invite for '%s' in DynamoDB: %v", invite.InviteeHandle, err)
+		return errors.New("failed to store group invite")
+	}
+
+	log.Printf("✅ Successfully stored group invite for '%s' in DynamoDB.", invite.InviteeHandle)
+	return nil
 }
 
 // ✅ GetSentInvites - Fetches invites created by User A
