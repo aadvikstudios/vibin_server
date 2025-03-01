@@ -162,10 +162,10 @@ func (c *InteractionController) GetMutualMatchesHandler(w http.ResponseWriter, r
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if matches == nil {
-		matches = []models.MatchedUserDetails{}
+		matches = []models.MatchedUserDetailsForConnections{}
 	}
 	json.NewEncoder(w).Encode(struct {
-		Matches []models.MatchedUserDetails `json:"matches"`
+		Matches []models.MatchedUserDetailsForConnections `json:"matches"`
 	}{matches})
 
 }

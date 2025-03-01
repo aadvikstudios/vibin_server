@@ -29,3 +29,14 @@ type MatchedUserDetails struct {
 	Photo      string `json:"photo"`
 	MatchID    string `json:"matchId"`
 }
+
+// MatchedUserDetailsForConnections represents a matched user with last message info
+type MatchedUserDetailsForConnections struct {
+	Name              string `json:"name"`
+	UserHandle        string `json:"userHandle"`
+	Photo             string `json:"photo"`
+	MatchID           string `json:"matchId"`
+	LastMessage       string `json:"lastMessage"`
+	LastMessageSender string `json:"lastMessageSender"`
+	LastMessageIsRead bool   `json:"lastMessageIsRead"`
+}

@@ -193,14 +193,13 @@ func (s *InteractionService) HandlePingApproval(ctx context.Context, sender, rec
 		log.Printf("⚠️ No existing interactionType found for %s -> %s", sender, receiver)
 		return fmt.Errorf("missing interactionType in sender's record")
 	}
-
 	// ✅ Update sender → receiver
 	err = s.UpdateInteractionStatus(ctx, sender, receiver, "match", &matchID, &message, nil)
 	if err != nil {
 		log.Printf("❌ Failed to approve ping: %v", err)
 		return err
 	}
-
+	// #[TODO] we need create for sender -> reciever instead of create
 	// ✅ Update receiver → sender (Now with `interactionType` and `message`)
 	err = s.UpdateInteractionStatus(ctx, receiver, sender, "match", &matchID, &message, &interactionType)
 	if err != nil {
@@ -329,7 +328,7 @@ func (s *InteractionService) CreateInitialMessage(ctx context.Context, sender, r
 		SenderID:  originalSender, // ✅ Keep the original sender
 		Content:   content,
 		CreatedAt: time.Now().Format(time.RFC3339), // Store timestamp
-		Liked:     false,                           // Default to false
+		Liked:     false,
 	}
 
 	// ✅ Set IsUnread using helper method
@@ -430,7 +429,7 @@ func (s *InteractionService) UpdateInteractionStatus(ctx context.Context, sender
 	return nil
 }
 
-func (s *InteractionService) GetMutualMatches(ctx context.Context, userHandle string) ([]models.MatchedUserDetails, error) {
+func (s *InteractionService) GetMutualMatches(ctx context.Context, userHandle string) ([]models.MatchedUserDetailsForConnections, error) {
 	log.Printf("🔍 Fetching mutual matches for user: %s", userHandle)
 
 	// Define the Global Secondary Index (GSI) for querying matches
@@ -447,26 +446,19 @@ func (s *InteractionService) GetMutualMatches(ctx context.Context, userHandle st
 		"#status": "status",
 	}
 
-	// 🔍 Log query parameters for debugging
-	log.Printf("🔍 Querying `status-index` with PK=%s and status=match", "USER#"+userHandle)
-
-	// Query DynamoDB using the Global Secondary Index
+	// 🔍 Query DynamoDB for mutual matches
 	items, err := s.Dynamo.QueryItemsWithIndex(ctx, models.InteractionsTable, indexName, keyCondition, expressionValues, expressionNames, 100)
 	if err != nil {
 		log.Printf("❌ Error fetching mutual matches from DynamoDB: %v", err)
 		return nil, fmt.Errorf("failed to fetch matches: %w", err)
 	}
 
-	// 🔥 Log raw DynamoDB query result
-	log.Printf("📦 Retrieved %d items from `status-index` for user %s", len(items), userHandle)
-
-	// If no matches found, return an empty slice instead of nil
 	if len(items) == 0 {
 		log.Printf("⚠️ No mutual matches found for user: %s", userHandle)
-		return []models.MatchedUserDetails{}, nil
+		return []models.MatchedUserDetailsForConnections{}, nil
 	}
 
-	var matchesWithProfiles []models.MatchedUserDetails
+	var matchesWithDetails []models.MatchedUserDetailsForConnections
 
 	// Process each interaction record
 	for _, item := range items {
@@ -484,11 +476,10 @@ func (s *InteractionService) GetMutualMatches(ctx context.Context, userHandle st
 		}
 
 		// 🔍 Fetch user profile for the matched user
-		log.Printf("🔍 Fetching profile for user: %s", matchedUserHandle)
 		profile, err := s.UserProfileService.GetUserProfileByHandle(ctx, matchedUserHandle)
 		if err != nil {
 			log.Printf("⚠️ Failed to fetch profile for %s: %v", matchedUserHandle, err)
-			continue // Skip this match if profile lookup fails
+			continue
 		}
 
 		photo := ""
@@ -496,19 +487,37 @@ func (s *InteractionService) GetMutualMatches(ctx context.Context, userHandle st
 			photo = profile.Photos[0]
 		}
 
-		// ✅ Append to results with only relevant fields
-		matchesWithProfiles = append(matchesWithProfiles, models.MatchedUserDetails{
+		// 🔍 Fetch last message for the match
+		lastMessage, err := s.ChatService.GetLastMessageByMatchID(ctx, *interaction.MatchID)
+		if err != nil {
+			log.Printf("⚠️ Error fetching last message for matchId: %s: %v", *interaction.MatchID, err)
+		}
 
-			// Extracted profile fields
-			Name:       profile.Name,
-			UserHandle: profile.UserHandle,
-			MatchID:    *interaction.MatchID,
-			Photo:      photo, // ✅ Safe array handling
+		// Default values for last message fields
+		lastMessageText := ""
+		lastMessageSender := ""
+		lastMessageIsRead := true
+
+		if lastMessage != nil {
+			lastMessageText = lastMessage.Content
+			lastMessageSender = lastMessage.SenderID
+			lastMessageIsRead = lastMessage.IsUnread == "false"
+		}
+
+		// ✅ Append to results with all details
+		matchesWithDetails = append(matchesWithDetails, models.MatchedUserDetailsForConnections{
+			Name:              profile.Name,
+			UserHandle:        profile.UserHandle,
+			MatchID:           *interaction.MatchID,
+			Photo:             photo,
+			LastMessage:       lastMessageText,
+			LastMessageSender: lastMessageSender,
+			LastMessageIsRead: lastMessageIsRead,
 		})
 	}
 
-	log.Printf("✅ Found %d mutual matches for %s", len(matchesWithProfiles), userHandle)
-	return matchesWithProfiles, nil
+	log.Printf("✅ Found %d mutual matches with last messages for %s", len(matchesWithDetails), userHandle)
+	return matchesWithDetails, nil
 }
 
 func (s *InteractionService) GetInteractedUsers(ctx context.Context, userHandle string, interactionTypes []string) ([]string, error) {

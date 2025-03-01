@@ -155,3 +155,40 @@ func (s *ChatService) UpdateMessageLikeStatus(ctx context.Context, matchID strin
 	log.Printf("✅ Successfully updated like status for message at %s", createdAt)
 	return nil
 }
+
+func (s *ChatService) GetLastMessageByMatchID(ctx context.Context, matchID string) (*models.Message, error) {
+	log.Printf("🔍 Fetching last message for matchId: %s", matchID)
+
+	// Define key condition to get messages by matchId, sorted by `createdAt` (descending order)
+	keyCondition := "#matchId = :matchId"
+	expressionValues := map[string]types.AttributeValue{
+		":matchId": &types.AttributeValueMemberS{Value: matchID},
+	}
+	expressionNames := map[string]string{
+		"#matchId": "matchId",
+	}
+
+	// Query DynamoDB using the matchId as the key and sorting by createdAt (latest first)
+	items, err := s.Dynamo.QueryItemsWithOptions(ctx, models.MessagesTable, keyCondition, expressionValues, expressionNames, 1, true) // `true` -> Descending order
+	if err != nil {
+		log.Printf("❌ Error fetching last message: %v", err)
+		return nil, fmt.Errorf("failed to fetch last message: %w", err)
+	}
+
+	// If no message is found, return nil
+	if len(items) == 0 {
+		log.Printf("ℹ️ No messages found for matchId: %s", matchID)
+		return nil, nil
+	}
+
+	// Unmarshal the most recent message
+	var lastMessage models.Message
+	err = attributevalue.UnmarshalMap(items[0], &lastMessage)
+	if err != nil {
+		log.Printf("❌ Error unmarshalling last message: %v", err)
+		return nil, fmt.Errorf("failed to parse last message: %w", err)
+	}
+
+	log.Printf("✅ Last message for matchId %s: %+v", matchID, lastMessage)
+	return &lastMessage, nil
+}
