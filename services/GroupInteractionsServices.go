@@ -52,7 +52,6 @@ func (s *GroupInteractionService) GetSentInvites(ctx context.Context, userHandle
 	return s.queryGroupInteractions(ctx, "USER#"+userHandle)
 }
 
-// ✅ GetPendingApprovals - Fetches pending invites for User B
 func (s *GroupInteractionService) GetPendingApprovals(ctx context.Context, approverHandle string) ([]models.GroupInteraction, error) {
 	log.Printf("🔍 Fetching pending approvals for approverHandle: %s", approverHandle)
 
@@ -65,7 +64,8 @@ func (s *GroupInteractionService) GetPendingApprovals(ctx context.Context, appro
 	log.Printf("📌 DynamoDB Query - Table: %s, Index: %s, KeyCondition: %s, Values: %+v",
 		models.GroupInteractionsTable, models.ApprovalIndex, keyCondition, expressionValues)
 
-	items, err := s.Dynamo.QueryItemsWithIndex(ctx, models.GroupInteractionsTable, models.ApprovalIndex, keyCondition, expressionValues, nil, 0)
+	// ✅ Fix: Set a valid limit (e.g., 100) instead of 0
+	items, err := s.Dynamo.QueryItemsWithIndex(ctx, models.GroupInteractionsTable, models.ApprovalIndex, keyCondition, expressionValues, nil, 100)
 	if err != nil {
 		log.Printf("❌ Error querying DynamoDB: %v", err)
 		return nil, err
