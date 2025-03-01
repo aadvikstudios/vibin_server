@@ -183,6 +183,41 @@ func (s *GroupInteractionService) ApproveOrDeclineInvite(ctx context.Context, ap
 	return nil
 }
 
+func (s *GroupInteractionService) GetActiveGroups(ctx context.Context, userHandle string) ([]models.GroupInteraction, error) {
+	log.Printf("🔍 Searching for active groups where user '%s' is a participant", userHandle)
+
+	// Define Key Condition Expression for querying user's groups
+	keyCondition := "PK = :pk"
+	expressionValues := map[string]types.AttributeValue{
+		":pk": &types.AttributeValueMemberS{Value: "USER#" + userHandle},
+	}
+
+	// Query DynamoDB for all groups the user is in
+	items, err := s.Dynamo.QueryItems(ctx, models.GroupInteractionsTable, keyCondition, expressionValues, nil, 100)
+	if err != nil {
+		log.Printf("❌ Error querying active groups for user '%s': %v", userHandle, err)
+		return nil, err
+	}
+
+	// Convert to Go struct
+	var allGroups []models.GroupInteraction
+	if err := attributevalue.UnmarshalListOfMaps(items, &allGroups); err != nil {
+		log.Printf("❌ Error unmarshaling groups for '%s': %v", userHandle, err)
+		return nil, err
+	}
+
+	// ✅ Filter for active groups where the user is in the members list
+	var activeGroups []models.GroupInteraction
+	for _, group := range allGroups {
+		if group.Status == "active" && contains(group.Members, userHandle) {
+			activeGroups = append(activeGroups, group)
+		}
+	}
+
+	log.Printf("✅ Found %d active groups for user '%s'", len(activeGroups), userHandle)
+	return activeGroups, nil
+}
+
 ///// 🔹🔹🔹 Helper Methods 🔹🔹🔹 /////
 
 // ✅ queryGroupInteractions - Fetches group interactions for a given user
@@ -251,4 +286,14 @@ func (s *GroupInteractionService) createGroupInteractionForInvitee(ctx context.C
 	}
 
 	return s.Dynamo.PutItem(ctx, models.GroupInteractionsTable, inviteForInvitee)
+}
+
+// ✅ Helper function to check if user is in members list
+func contains(members []string, userHandle string) bool {
+	for _, member := range members {
+		if member == userHandle {
+			return true
+		}
+	}
+	return false
 }

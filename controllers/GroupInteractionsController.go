@@ -3,10 +3,13 @@ package controllers
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"time"
 	"vibin_server/models"
 	"vibin_server/services"
+
+	"github.com/gorilla/mux"
 )
 
 // GroupInteractionController handles group invite operations
@@ -139,4 +142,23 @@ func (c *GroupInteractionController) ApproveOrDeclineInvite(w http.ResponseWrite
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"message": "Invite status updated successfully"})
+}
+
+// ✅ GetActiveGroups - Fetches all active groups for a given user
+func (c *GroupInteractionController) GetActiveGroups(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	userHandle := vars["userHandle"]
+
+	log.Printf("🔍 Fetching active groups for user: %s", userHandle)
+
+	groups, err := c.service.GetActiveGroups(r.Context(), userHandle)
+	if err != nil {
+		log.Printf("❌ Error fetching active groups for %s: %v", userHandle, err)
+		http.Error(w, "Failed to fetch active groups", http.StatusInternalServerError)
+		return
+	}
+
+	// ✅ Send response
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(groups)
 }

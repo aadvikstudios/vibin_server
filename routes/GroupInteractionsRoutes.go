@@ -24,4 +24,5 @@ func RegisterGroupInteractionRoutes(r *mux.Router, groupInteractionService *serv
 
 	// ✅ Approve or decline an invite
 	groupRouter.HandleFunc("/approve", controller.ApproveOrDeclineInvite).Methods("POST")
+	groupRouter.HandleFunc("/active/{userHandle}", controller.GetActiveGroups).Methods("GET")
 }
