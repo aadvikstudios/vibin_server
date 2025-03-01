@@ -162,27 +162,47 @@ func (s *InteractionService) CreateOrUpdateInteraction(
 	}
 
 	// ✅ Otherwise, update existing interaction
-	err = s.UpdateInteractionStatus(ctx, sender, receiver, newStatus, matchID, message)
+	err = s.UpdateInteractionStatus(ctx, sender, receiver, newStatus, matchID, message, nil)
 	if err != nil {
 		return false, nil, err
 	}
 
 	return isMatch, matchedUser, nil
 }
-
 func (s *InteractionService) HandlePingApproval(ctx context.Context, sender, receiver string) error {
 	log.Printf("✅ Handling Ping Approval: %s -> %s", sender, receiver)
 
-	// ✅ Update status to "match"
+	// ✅ Generate a Match ID
 	matchID := uuid.New().String()
-	err := s.UpdateInteractionStatus(ctx, sender, receiver, "match", &matchID, nil)
+
+	// ✅ Fetch existing interaction for sender → receiver
+	interactionData, err := s.GetInteraction(ctx, sender, receiver)
+	if err != nil {
+		log.Printf("❌ Failed to fetch sender interaction: %v", err)
+		return err
+	}
+
+	// ✅ Ensure interactionType and message exist
+	var interactionType, message string
+	if interactionData != nil {
+		interactionType = interactionData.InteractionType
+		if interactionData.Message != nil {
+			message = *interactionData.Message
+		}
+	} else {
+		log.Printf("⚠️ No existing interactionType found for %s -> %s", sender, receiver)
+		return fmt.Errorf("missing interactionType in sender's record")
+	}
+
+	// ✅ Update sender → receiver
+	err = s.UpdateInteractionStatus(ctx, sender, receiver, "match", &matchID, &message, nil)
 	if err != nil {
 		log.Printf("❌ Failed to approve ping: %v", err)
 		return err
 	}
 
-	// ✅ Also update reverse interaction (Receiver -> Sender)
-	err = s.UpdateInteractionStatus(ctx, receiver, sender, "match", &matchID, nil)
+	// ✅ Update receiver → sender (Now with `interactionType` and `message`)
+	err = s.UpdateInteractionStatus(ctx, receiver, sender, "match", &matchID, &message, &interactionType)
 	if err != nil {
 		log.Printf("⚠️ Failed to update reverse ping status: %v", err)
 	}
@@ -200,15 +220,30 @@ func (s *InteractionService) HandlePingApproval(ctx context.Context, sender, rec
 func (s *InteractionService) HandlePingDecline(ctx context.Context, sender, receiver string) error {
 	log.Printf("🚫 Handling Ping Decline: %s -> %s", sender, receiver)
 
-	// ✅ Update status to "declined"
-	err := s.UpdateInteractionStatus(ctx, sender, receiver, "declined", nil, nil)
+	// ✅ Fetch the existing interaction to get `interactionType`
+	interactionData, err := s.GetInteraction(ctx, sender, receiver)
+	if err != nil {
+		log.Printf("❌ Failed to fetch sender interaction: %v", err)
+		return err
+	}
+
+	// ✅ Ensure interactionType exists
+	var interactionType *string
+	if interactionData != nil && interactionData.InteractionType != "" {
+		interactionType = &interactionData.InteractionType
+	} else {
+		log.Printf("⚠️ No interactionType found for %s -> %s", sender, receiver)
+	}
+
+	// ✅ Update sender → receiver status to "declined"
+	err = s.UpdateInteractionStatus(ctx, sender, receiver, "declined", nil, nil, nil)
 	if err != nil {
 		log.Printf("❌ Failed to decline ping: %v", err)
 		return err
 	}
 
-	// ✅ Also update reverse interaction (Receiver -> Sender)
-	err = s.UpdateInteractionStatus(ctx, receiver, sender, "declined", nil, nil)
+	// ✅ Update receiver → sender status to "declined" (Now with `interactionType`)
+	err = s.UpdateInteractionStatus(ctx, receiver, sender, "declined", nil, nil, interactionType)
 	if err != nil {
 		log.Printf("⚠️ Failed to update reverse ping status: %v", err)
 	}
@@ -243,7 +278,7 @@ func (s *InteractionService) HandleMutualMatch(ctx context.Context, sender, rece
 	matchID := uuid.New().String()
 
 	// ✅ Update UserB -> UserA interaction to "match"
-	err := s.UpdateInteractionStatus(ctx, receiver, sender, "match", &matchID, nil)
+	err := s.UpdateInteractionStatus(ctx, receiver, sender, "match", &matchID, nil, nil)
 	if err != nil {
 		log.Printf("❌ Failed to update mutual match for %s -> %s: %v", receiver, sender, err)
 		return nil, err
@@ -340,7 +375,7 @@ func (s *InteractionService) CreateInteraction(ctx context.Context, sender, rece
 }
 
 // UpdateInteractionStatus updates the status of an existing interaction
-func (s *InteractionService) UpdateInteractionStatus(ctx context.Context, sender, receiver, newStatus string, matchID *string, message *string) error {
+func (s *InteractionService) UpdateInteractionStatus(ctx context.Context, sender, receiver, newStatus string, matchID *string, message *string, interactionType *string) error {
 	log.Printf("🔄 Updating interaction %s -> %s to status: %s", sender, receiver, newStatus)
 
 	updateExpression := "SET #status = :status, #lastUpdated = :lastUpdated"
@@ -367,6 +402,13 @@ func (s *InteractionService) UpdateInteractionStatus(ctx context.Context, sender
 		expressionNames["#message"] = "message"
 	}
 
+	// Add interactionType if provided (Optional)
+	if interactionType != nil {
+		updateExpression += ", #interactionType = :interactionType"
+		expressionValues[":interactionType"] = &types.AttributeValueMemberS{Value: *interactionType}
+		expressionNames["#interactionType"] = "interactionType"
+	}
+
 	// Define key for update
 	key := map[string]types.AttributeValue{
 		"PK": &types.AttributeValueMemberS{Value: "USER#" + sender},
@@ -382,6 +424,7 @@ func (s *InteractionService) UpdateInteractionStatus(ctx context.Context, sender
 	log.Println("✅ Interaction status successfully updated.")
 	return nil
 }
+
 func (s *InteractionService) GetMutualMatches(ctx context.Context, userHandle string) ([]models.MatchedUserDetails, error) {
 	log.Printf("🔍 Fetching mutual matches for user: %s", userHandle)
 
