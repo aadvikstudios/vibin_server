@@ -23,22 +23,7 @@ func (s *GroupInteractionService) CreateGroupInvite(ctx context.Context, invite 
 
 // ✅ GetSentInvites - Fetches invites created by User A
 func (s *GroupInteractionService) GetSentInvites(ctx context.Context, userHandle string) ([]models.GroupInteraction, error) {
-	keyCondition := "PK = :pk"
-	expressionValues := map[string]types.AttributeValue{
-		":pk": &types.AttributeValueMemberS{Value: "USER#" + userHandle},
-	}
-
-	items, err := s.Dynamo.QueryItems(ctx, models.GroupInteractionsTable, keyCondition, expressionValues, nil, 0)
-	if err != nil {
-		return nil, err
-	}
-
-	var invites []models.GroupInteraction
-	if err := attributevalue.UnmarshalListOfMaps(items, &invites); err != nil {
-		return nil, err
-	}
-
-	return invites, nil
+	return s.queryGroupInteractions(ctx, "USER#"+userHandle)
 }
 
 // ✅ GetPendingApprovals - Fetches pending invites for User B
@@ -69,27 +54,13 @@ func (s *GroupInteractionService) ApproveOrDeclineInvite(ctx context.Context, ap
 		return errors.New("invalid status value")
 	}
 
-	// Fetch the invite entry
-	key := map[string]types.AttributeValue{
-		"PK": &types.AttributeValueMemberS{Value: "USER#" + approverHandle},
-		"SK": &types.AttributeValueMemberS{Value: "PENDING_APPROVAL#GROUP_INVITE#" + inviteeHandle},
-	}
-
-	item, err := s.Dynamo.GetItem(ctx, models.GroupInteractionsTable, key)
+	// Fetch existing invite
+	invite, err := s.getGroupInteraction(ctx, "USER#"+approverHandle, "PENDING_APPROVAL#GROUP_INVITE#"+inviteeHandle)
 	if err != nil {
 		return err
 	}
 
-	if item == nil {
-		return errors.New("invite not found")
-	}
-
-	var invite models.GroupInteraction
-	if err := attributevalue.UnmarshalMap(item, &invite); err != nil {
-		return err
-	}
-
-	// If the invite is approved, generate a group ID
+	// If approved, generate a group ID
 	var groupId *string
 	if status == "approved" {
 		newGroupId := uuid.New().String()
@@ -102,32 +73,85 @@ func (s *GroupInteractionService) ApproveOrDeclineInvite(ctx context.Context, ap
 	invite.Members = append(invite.Members, invite.InviteeHandle) // Add invitee to members list
 	invite.LastUpdated = time.Now()
 
-	// Update item in DynamoDB
-	if err := s.Dynamo.PutItem(ctx, models.GroupInteractionsTable, invite); err != nil {
+	// Save updated invite
+	if err := s.updateGroupInteraction(ctx, *invite); err != nil {
 		return err
 	}
 
 	// If approved, add the group interaction for the invitee
 	if status == "approved" {
-		inviteForInvitee := models.GroupInteraction{
-			PK:              "USER#" + invite.InviteeHandle,
-			SK:              "GROUP#" + *groupId,
-			InteractionType: "group_chat",
-			Status:          "active",
-			GroupID:         groupId,
-			InviterHandle:   invite.InviterHandle,
-			ApproverHandle:  invite.ApproverHandle,
-			InviteeHandle:   invite.InviteeHandle,
-			Members:         invite.Members,
-			CreatedAt:       time.Now(),
-			LastUpdated:     time.Now(),
-		}
-
-		// Put the new group interaction for the invitee
-		if err := s.Dynamo.PutItem(ctx, models.GroupInteractionsTable, inviteForInvitee); err != nil {
-			return err
-		}
+		return s.createGroupInteractionForInvitee(ctx, *invite, *groupId)
 	}
 
 	return nil
+}
+
+///// 🔹🔹🔹 Helper Methods 🔹🔹🔹 /////
+
+// ✅ queryGroupInteractions - Fetches group interactions for a given user
+func (s *GroupInteractionService) queryGroupInteractions(ctx context.Context, partitionKey string) ([]models.GroupInteraction, error) {
+	keyCondition := "PK = :pk"
+	expressionValues := map[string]types.AttributeValue{
+		":pk": &types.AttributeValueMemberS{Value: partitionKey},
+	}
+
+	items, err := s.Dynamo.QueryItems(ctx, models.GroupInteractionsTable, keyCondition, expressionValues, nil, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	var interactions []models.GroupInteraction
+	if err := attributevalue.UnmarshalListOfMaps(items, &interactions); err != nil {
+		return nil, err
+	}
+
+	return interactions, nil
+}
+
+// ✅ getGroupInteraction - Fetches a single group interaction from DynamoDB
+func (s *GroupInteractionService) getGroupInteraction(ctx context.Context, pk, sk string) (*models.GroupInteraction, error) {
+	key := map[string]types.AttributeValue{
+		"PK": &types.AttributeValueMemberS{Value: pk},
+		"SK": &types.AttributeValueMemberS{Value: sk},
+	}
+
+	item, err := s.Dynamo.GetItem(ctx, models.GroupInteractionsTable, key)
+	if err != nil {
+		return nil, err
+	}
+
+	if item == nil {
+		return nil, errors.New("group interaction not found")
+	}
+
+	var interaction models.GroupInteraction
+	if err := attributevalue.UnmarshalMap(item, &interaction); err != nil {
+		return nil, err
+	}
+
+	return &interaction, nil
+}
+
+// ✅ updateGroupInteraction - Updates a group interaction in DynamoDB
+func (s *GroupInteractionService) updateGroupInteraction(ctx context.Context, interaction models.GroupInteraction) error {
+	return s.Dynamo.PutItem(ctx, models.GroupInteractionsTable, interaction)
+}
+
+// ✅ createGroupInteractionForInvitee - Adds a new group record for an invitee
+func (s *GroupInteractionService) createGroupInteractionForInvitee(ctx context.Context, invite models.GroupInteraction, groupId string) error {
+	inviteForInvitee := models.GroupInteraction{
+		PK:              "USER#" + invite.InviteeHandle,
+		SK:              "GROUP#" + groupId,
+		InteractionType: "group_chat",
+		Status:          "active",
+		GroupID:         &groupId,
+		InviterHandle:   invite.InviterHandle,
+		ApproverHandle:  invite.ApproverHandle,
+		InviteeHandle:   invite.InviteeHandle,
+		Members:         invite.Members,
+		CreatedAt:       time.Now(),
+		LastUpdated:     time.Now(),
+	}
+
+	return s.Dynamo.PutItem(ctx, models.GroupInteractionsTable, inviteForInvitee)
 }
