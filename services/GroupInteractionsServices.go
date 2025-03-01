@@ -211,7 +211,7 @@ func (s *GroupInteractionService) GetActiveGroups(ctx context.Context, userHandl
 	for _, group := range allGroups {
 		log.Printf("🔍 Checking group %s with status %s", group.GroupID, group.Status)
 
-		// ✅ Directly use `group.Members` since it's already []string
+		// ✅ Directly use `group.Members` (it is already []string)
 		if group.Status == "active" &&
 			group.InteractionType == "group_chat" &&
 			contains(group.Members, userHandle) { // Directly check in []string
