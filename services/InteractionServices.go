@@ -374,18 +374,22 @@ func (s *InteractionService) CreateInteraction(ctx context.Context, sender, rece
 	return nil
 }
 
-// UpdateInteractionStatus updates the status of an existing interaction
-func (s *InteractionService) UpdateInteractionStatus(ctx context.Context, sender, receiver, newStatus string, matchID *string, message *string, interactionType *string) error {
+// UpdateInteractionStatus updates the status of an existing interaction and ensures all fields are properly set
+func (s *InteractionService) UpdateInteractionStatus(ctx context.Context, sender, receiver, newStatus string, matchID, message, interactionType *string) error {
 	log.Printf("🔄 Updating interaction %s -> %s to status: %s", sender, receiver, newStatus)
 
-	updateExpression := "SET #status = :status, #lastUpdated = :lastUpdated"
+	updateExpression := "SET #status = :status, #lastUpdated = :lastUpdated, #senderHandle = :sender, #receiverHandle = :receiver"
 	expressionValues := map[string]types.AttributeValue{
 		":status":      &types.AttributeValueMemberS{Value: newStatus},
 		":lastUpdated": &types.AttributeValueMemberS{Value: time.Now().Format(time.RFC3339)},
+		":sender":      &types.AttributeValueMemberS{Value: sender},   // ✅ Directly using sender
+		":receiver":    &types.AttributeValueMemberS{Value: receiver}, // ✅ Directly using receiver
 	}
 	expressionNames := map[string]string{
-		"#status":      "status",
-		"#lastUpdated": "lastUpdated",
+		"#status":         "status",
+		"#lastUpdated":    "lastUpdated",
+		"#senderHandle":   "senderHandle",
+		"#receiverHandle": "receiverHandle",
 	}
 
 	// Add MatchID if provided
@@ -402,7 +406,7 @@ func (s *InteractionService) UpdateInteractionStatus(ctx context.Context, sender
 		expressionNames["#message"] = "message"
 	}
 
-	// Add interactionType if provided (Optional)
+	// Add interactionType if provided
 	if interactionType != nil {
 		updateExpression += ", #interactionType = :interactionType"
 		expressionValues[":interactionType"] = &types.AttributeValueMemberS{Value: *interactionType}
@@ -415,6 +419,7 @@ func (s *InteractionService) UpdateInteractionStatus(ctx context.Context, sender
 		"SK": &types.AttributeValueMemberS{Value: "INTERACTION#" + receiver},
 	}
 
+	// Execute update
 	_, err := s.Dynamo.UpdateItem(ctx, models.InteractionsTable, updateExpression, key, expressionValues, expressionNames)
 	if err != nil {
 		log.Printf("❌ Error updating interaction status: %v", err)
