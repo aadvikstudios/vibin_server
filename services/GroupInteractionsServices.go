@@ -20,11 +20,13 @@ type GroupInteractionService struct {
 // ✅ CreateGroupInvite - Adds a new group invite to DynamoDB after validating the InviteeHandle
 func (s *GroupInteractionService) CreateGroupInvite(ctx context.Context, invite models.GroupInteraction) error {
 	// ✅ Step 1: Validate InviteeHandle (Check if user exists)
-	profile, err := s.UserProfileService.GetUserProfileByHandle(ctx, invite.InviteeHandle)
+	isAvailable, err := s.UserProfileService.IsUserHandleAvailable(ctx, invite.InviteeHandle)
+	// Check if userhandle exists
 	if err != nil {
 		return errors.New("failed to validate invitee handle") // Keep it generic for logging purposes
 	}
-	if profile == nil {
+
+	if isAvailable {
 		return errors.New("invalid_invitee_handle") // Use a specific error for better handling in the controller
 	}
 
