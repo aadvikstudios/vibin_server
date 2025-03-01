@@ -123,42 +123,60 @@ func (s *GroupInteractionService) GetPendingApprovals(ctx context.Context, appro
 	return pendingInvites, nil
 }
 
-// ✅ ApproveOrDeclineInvite - Approves or declines a pending invite
+// ✅ ApproveOrDeclineInvite - Approves or declines a pending invite with detailed logging
 func (s *GroupInteractionService) ApproveOrDeclineInvite(ctx context.Context, approverHandle, inviteeHandle, status string) error {
+	log.Printf("🔍 ApproveOrDeclineInvite: Processing request for Approver: %s, Invitee: %s, Status: %s", approverHandle, inviteeHandle, status)
+
 	// Validate status
 	if status != "approved" && status != "declined" {
+		log.Printf("❌ Invalid status received: %s", status)
 		return errors.New("invalid status value")
 	}
 
 	// Fetch existing invite
+	log.Printf("📌 Fetching pending invite for Approver: %s, Invitee: %s", approverHandle, inviteeHandle)
 	invite, err := s.getGroupInteraction(ctx, "USER#"+approverHandle, "PENDING_APPROVAL#GROUP_INVITE#"+inviteeHandle)
 	if err != nil {
+		log.Printf("❌ Error fetching invite for Approver: %s, Invitee: %s - Error: %v", approverHandle, inviteeHandle, err)
 		return err
 	}
+	log.Printf("✅ Found invite: %+v", invite)
 
 	// If approved, generate a group ID
 	var groupId *string
 	if status == "approved" {
 		newGroupId := uuid.New().String()
 		groupId = &newGroupId
+		log.Printf("🔹 Generated new Group ID: %s for Approver: %s, Invitee: %s", *groupId, approverHandle, inviteeHandle)
 	}
 
 	// Update the invite status
+	log.Printf("✏️ Updating invite status to: %s", status)
 	invite.Status = status
 	invite.GroupID = groupId
 	invite.Members = append(invite.Members, invite.InviteeHandle) // Add invitee to members list
 	invite.LastUpdated = time.Now()
+	log.Printf("🛠️ Updated invite details: %+v", invite)
 
 	// Save updated invite
+	log.Printf("💾 Saving updated invite in the database...")
 	if err := s.updateGroupInteraction(ctx, *invite); err != nil {
+		log.Printf("❌ Error updating invite in database: %v", err)
 		return err
 	}
+	log.Printf("✅ Successfully updated invite in database.")
 
 	// If approved, add the group interaction for the invitee
 	if status == "approved" {
-		return s.createGroupInteractionForInvitee(ctx, *invite, *groupId)
+		log.Printf("🔗 Creating group interaction for invitee: %s in group: %s", inviteeHandle, *groupId)
+		if err := s.createGroupInteractionForInvitee(ctx, *invite, *groupId); err != nil {
+			log.Printf("❌ Error creating group interaction for invitee: %v", err)
+			return err
+		}
+		log.Printf("✅ Successfully added invitee to the group: %s", *groupId)
 	}
 
+	log.Printf("🎉 Invite processing completed successfully for Approver: %s, Invitee: %s, Status: %s", approverHandle, inviteeHandle, status)
 	return nil
 }
 
