@@ -25,6 +25,8 @@ func main() {
 	userProfileService := &services.UserProfileService{Dynamo: dynamoService}
 	chatService := &services.ChatService{Dynamo: dynamoService}
 	interactionService := &services.InteractionService{Dynamo: dynamoService, UserProfileService: userProfileService, ChatService: chatService}
+	groupInteractionService := &services.GroupInteractionService{Dynamo: dynamoService}
+
 	// Set up the server port
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -51,6 +53,7 @@ func main() {
 	routes.RegisterUserProfileRoutes(r, userProfileService)
 	routes.RegisterChatRoutes(r, chatService)
 	routes.RegisterInteractionsRoutes(r, interactionService)
+	routes.RegisterGroupInteractionRoutes(r, groupInteractionService)
 	routes.RegisterS3Routes(r)
 
 	r.HandleFunc("/privacy-policy", routes.PrivacyPolicyHandler).Methods("GET")
