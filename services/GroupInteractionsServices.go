@@ -55,7 +55,7 @@ func (s *GroupInteractionService) GetSentInvites(ctx context.Context, userHandle
 func (s *GroupInteractionService) GetPendingApprovals(ctx context.Context, approverHandle string) ([]models.GroupInteraction, error) {
 	log.Printf("🔍 Fetching pending approvals for approverHandle: %s", approverHandle)
 
-	keyCondition := "approverHandle = :approver AND #status = :status" // ✅ Use #status instead of status
+	keyCondition := "approverHandle = :approver AND #status = :status"
 	expressionValues := map[string]types.AttributeValue{
 		":approver": &types.AttributeValueMemberS{Value: approverHandle},
 		":status":   &types.AttributeValueMemberS{Value: "pending"},
@@ -63,13 +63,13 @@ func (s *GroupInteractionService) GetPendingApprovals(ctx context.Context, appro
 
 	// ✅ Define Expression Attribute Names to handle reserved keywords
 	expressionNames := map[string]string{
-		"#status": "status", // ✅ Map #status to status to bypass reserved keyword issue
+		"#status": "status",
 	}
 
 	log.Printf("📌 DynamoDB Query - Table: %s, Index: %s, KeyCondition: %s, Values: %+v",
 		models.GroupInteractionsTable, models.ApprovalIndex, keyCondition, expressionValues)
 
-	// ✅ Pass expressionNames to the query
+	// ✅ Query DynamoDB
 	items, err := s.Dynamo.QueryItemsWithIndex(ctx, models.GroupInteractionsTable, models.ApprovalIndex, keyCondition, expressionValues, expressionNames, 100)
 	if err != nil {
 		log.Printf("❌ Error querying DynamoDB: %v", err)
@@ -84,7 +84,42 @@ func (s *GroupInteractionService) GetPendingApprovals(ctx context.Context, appro
 		return nil, err
 	}
 
-	log.Printf("✅ Successfully retrieved %d pending invites", len(pendingInvites))
+	// ✅ Fetch user profiles for invitees
+	for i, invite := range pendingInvites {
+		inviteeHandle := invite.InviteeHandle
+
+		// Fetch profile for each invitee
+		profile, err := s.UserProfileService.GetUserProfileByHandle(ctx, inviteeHandle)
+		if err != nil {
+			log.Printf("⚠️ Failed to fetch user profile for %s: %v", inviteeHandle, err)
+			continue // Skip this invitee if profile fetch fails
+		}
+
+		// Extract photo
+		photo := ""
+		if len(profile.Photos) > 0 {
+			photo = profile.Photos[0]
+		}
+
+		// Populate InviteeUserDetails
+		invite.InviteeProfile = &models.InviteeUserDetails{
+			Name:        profile.Name,
+			Photo:       photo,
+			Bio:         profile.Bio,
+			Desires:     profile.Desires,
+			Gender:      profile.Gender,
+			Interests:   profile.Interests,
+			LookingFor:  profile.LookingFor,
+			Orientation: profile.Orientation,
+		}
+
+		log.Printf("✅ Fetched user profile for invitee %s: %+v", inviteeHandle, invite.InviteeProfile)
+
+		// Update the invite entry
+		pendingInvites[i] = invite
+	}
+
+	log.Printf("✅ Successfully retrieved %d pending invites with enriched invitee profiles", len(pendingInvites))
 	return pendingInvites, nil
 }
 
