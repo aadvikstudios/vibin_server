@@ -13,4 +13,6 @@ func RegisterGroupChatRoutes(r *mux.Router, groupChatService *services.GroupChat
 
 	groupRouter := r.PathPrefix("/api/group-chat").Subrouter()
 	groupRouter.HandleFunc("/message", controller.HandleCreateGroupMessage).Methods("POST") // ✅ Create a new group message
+	groupRouter.HandleFunc("/messages", controller.HandleGetGroupMessages).Methods("GET")   // ✅ Fetch group messages
+
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 	"vibin_server/models"
 	"vibin_server/services"
@@ -88,4 +89,37 @@ func (c *GroupChatController) HandleCreateGroupMessage(w http.ResponseWriter, r 
 		"status":  "success",
 		"message": "Group message sent successfully",
 	})
+}
+
+// HandleGetGroupMessages - Fetch latest messages based on groupId and limit
+func (c *GroupChatController) HandleGetGroupMessages(w http.ResponseWriter, r *http.Request) {
+	// ✅ Parse query parameters
+	groupID := r.URL.Query().Get("groupId")
+	limitStr := r.URL.Query().Get("limit")
+
+	// ✅ Validate groupId
+	if groupID == "" {
+		http.Error(w, `{"error": "groupId is required"}`, http.StatusBadRequest)
+		return
+	}
+
+	// ✅ Convert limit from string to int (default: 50)
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 {
+		limit = 50 // Default to 50 messages
+	}
+
+	log.Printf("🔍 Fetching latest %d messages for groupId: %s", limit, groupID)
+
+	// ✅ Fetch messages from service
+	messages, err := c.GroupChatService.GetMessagesByGroupID(context.TODO(), groupID, limit)
+	if err != nil {
+		log.Printf("❌ Error fetching group messages: %v", err)
+		http.Error(w, `{"error": "Failed to fetch group messages"}`, http.StatusInternalServerError)
+		return
+	}
+
+	// ✅ Send response
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(messages)
 }
