@@ -28,6 +28,7 @@ func (c *GroupInteractionController) CreateGroupInvite(w http.ResponseWriter, r 
 		InviterHandle  string `json:"inviterHandle"`
 		ApproverHandle string `json:"approverHandle"`
 		InviteeHandle  string `json:"inviteeHandle"`
+		GroupName      string `json:"groupName"`
 	}
 
 	// Decode request body
@@ -49,6 +50,7 @@ func (c *GroupInteractionController) CreateGroupInvite(w http.ResponseWriter, r 
 		InteractionType: "group_invite",
 		Status:          "pending",
 		GroupID:         nil, // No group ID yet
+		GroupName:       &inviteRequest.GroupName,
 		InviterHandle:   inviteRequest.InviterHandle,
 		ApproverHandle:  inviteRequest.ApproverHandle,
 		InviteeHandle:   inviteRequest.InviteeHandle,
